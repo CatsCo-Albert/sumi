@@ -4,6 +4,7 @@ import {
   revokeMembership,
   listMembers,
   getSubject,
+  upsertSubject,
 } from "@/src/auth/identity";
 import { actorForProject } from "@/lib/http-auth";
 
@@ -45,11 +46,16 @@ export async function POST(
     return Response.json({ error: "subjectId and role required" }, { status: 400 });
   }
   const db = await getDb();
+  // If the subject isn't cached yet (they've never connected), seed a stub
+  // row so project_members FK resolves. The real display info fills in on
+  // their first WS connect via upsertSubject.
   if (!getSubject(db, body.subjectId)) {
-    return Response.json(
-      { error: "unknown subjectId — subject must have connected at least once" },
-      { status: 400 }
-    );
+    const isAgent = body.subjectId.startsWith("a");
+    upsertSubject(db, {
+      subjectId: body.subjectId,
+      kind: isAgent ? "agent" : "user",
+      displayName: body.subjectId,
+    });
   }
   grantMembership(db, {
     projectId,

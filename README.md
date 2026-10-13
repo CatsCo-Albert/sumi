@@ -104,6 +104,7 @@ GET  /api/documents/content?projectId&filePath          → { content, contentHa
 PUT  /api/documents/content  { projectId, filePath, content, baseContentHash? }
      → 200 { contentHash }  |  409 { errorCode: "FILE_CONFLICT", currentHash }
 POST /api/edits/apply          { projectId, filePath, blocks, editId? }
+GET  /api/friends                                     → CatsCo friends + my bots merged
 POST /api/pending-edits        { projectId, fileId, blocks, targetUserId?, description? }
 GET  /api/pending-edits?projectId&fileId                  → reviewer's pending queue
 DELETE /api/pending-edits      { editId }                                       (reviewer only)
@@ -149,6 +150,7 @@ Working:
 - Optimistic concurrency — `baseContentHash` guards the canonical blob; 409 → client re-GETs hash and retries once
 - Pending edits — agents `POST /api/pending-edits` with line-number blocks; each row is broadcast via SSE (`pending_edit_changed`), lands in `useEditStore`, renders as inline diff decorations with 保留/撤销 buttons. Accept → `POST /api/edits/apply` pushes into Yjs + marks row applied. Reject → DELETE marks row rejected. Doc snapshot is captured at propose-time so RelPos anchors survive drift.
 - Agent lifecycle — owner can `PATCH members {status: disabled}` to quarantine an `a*` subject; WS auth rejects them until re-enabled.
+- Contact picker — `/api/friends` proxies CatsCo friends + my bots; the member panel offers a one-click "add as editor" list plus manual fallback.
 - Assets — `POST /api/projects/:id/assets` uploads binary (10MB cap); GET serves immutable content-hash'd URL.
 - Agent onboarding — `GET /api/projects/:id/agent-setup` returns copy-pasteable instructions (`connectSumi()` + Y.Text edit API + env vars); UI exposes it from the member panel
 

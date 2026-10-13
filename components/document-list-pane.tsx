@@ -30,6 +30,14 @@ interface Member {
   kind: string | null;
   status?: string | null;  // 'active' | 'disabled' | null
 }
+interface Contact {
+  subjectId: string;
+  uid: number;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+  kind: "user" | "agent";
+}
 interface AgentSetup {
   subjectId: string;
   role: string;
@@ -67,6 +75,9 @@ export default function DocumentListPane() {
   const [renamingDoc, setRenamingDoc] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [renameFileId, setRenameFileId] = useState("");
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [addMemberMode, setAddMemberMode] = useState<"picker" | "manual">("picker");
 
   // Load projects + whoami on mount
   useEffect(() => {
@@ -105,6 +116,14 @@ export default function DocumentListPane() {
       .then((r) => (r.ok ? r.json() : { members: [] }))
       .then((d) => setMembers(d.members || []))
       .catch(() => setMembers([]));
+
+    // Also load contacts (friends + bots) so the picker can render.
+    setContactsLoading(true);
+    fetch("/api/friends", { headers: getAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : { users: [], agents: [] }))
+      .then((d) => setContacts([...(d.users ?? []), ...(d.agents ?? [])]))
+      .catch(() => setContacts([]))
+      .finally(() => setContactsLoading(false));
   }, [selected, showMembers]);
 
   const isOwner = selected && sessionSubjectId && selected.ownerUid === sessionSubjectId;
@@ -213,15 +232,17 @@ export default function DocumentListPane() {
     setRenamingDoc(null);
   };
 
-  const addMember = async () => {
-    if (!selected || !newMemberId.trim()) return;
+  const addMember = async (subjectIdOverride?: string, roleOverride?: "viewer" | "editor") => {
+    if (!selected) return;
+    const subjectId = subjectIdOverride ?? newMemberId.trim();
+    if (!subjectId) return;
     setError(null);
     const res = await fetch(`/api/projects/${selected.id}/members`, {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
-        subjectId: newMemberId.trim(),
-        role: newMemberRole,
+        subjectId,
+        role: roleOverride ?? newMemberRole,
       }),
     });
     if (!res.ok) {
@@ -229,14 +250,13 @@ export default function DocumentListPane() {
       setError(data.error || "failed");
       return;
     }
-    const added = newMemberId.trim();
     setNewMemberId("");
     // Refresh list, and if it was an agent — auto-open the onboarding card
     fetch(`/api/projects/${selected.id}/members`, { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => setMembers(d.members || []));
-    if (added.startsWith("a")) {
-      toggleAgentSetup(added);
+    if (subjectId.startsWith("a")) {
+      toggleAgentSetup(subjectId);
     }
   };
 
@@ -575,27 +595,121 @@ export default function DocumentListPane() {
                     );
                   })}
                 </ul>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={newMemberId}
-                    onChange={(e) => setNewMemberId(e.target.value)}
-                    placeholder="u123 或 a456"
-                    className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[12px] outline-none focus:ring-1 focus:ring-primary"
-                  />
-                  <select
-                    value={newMemberRole}
-                    onChange={(e) => setNewMemberRole(e.target.value as "viewer" | "editor")}
-                    className="rounded-md border border-border bg-background px-2 py-1.5 text-[12px] outline-none"
-                  >
-                    <option value="editor">editor</option>
-                    <option value="viewer">viewer</option>
-                  </select>
-                  <button
-                    onClick={addMember}
-                    className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground"
-                  >
-                    添加
-                  </button>
+                {/* Member picker — contacts from CatsCo friends/bots */}
+                <div className="border-t border-border/40 pt-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-[11px] font-medium text-muted-foreground">
+                      添加成员
+                    </div>
+                    <div className="flex items-center gap-1 rounded-md border border-border/60 p-0.5">
+                      <button
+                        onClick={() => setAddMemberMode("picker")}
+                        className={cn(
+                          "rounded px-2 py-0.5 text-[10px] font-medium",
+                          addMemberMode === "picker"
+                            ? "bg-accent text-foreground"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        好友/Bot
+                      </button>
+                      <button
+                        onClick={() => setAddMemberMode("manual")}
+                        className={cn(
+                          "rounded px-2 py-0.5 text-[10px] font-medium",
+                          addMemberMode === "manual"
+                            ? "bg-accent text-foreground"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        手动输入
+                      </button>
+                    </div>
+                  </div>
+
+                  {addMemberMode === "picker" ? (
+                    <div className="space-y-2">
+                      {contactsLoading ? (
+                        <div className="text-[11px] text-muted-foreground">
+                          载入联系人…
+                        </div>
+                      ) : contacts.length === 0 ? (
+                        <div className="rounded-md border border-dashed border-border/60 p-3 text-[11px] text-muted-foreground">
+                          CatsCo 还没给你任何好友或 bot —— 先到 CatsCo 加好友
+                          或创建 bot，再回来选。
+                        </div>
+                      ) : (
+                        <div className="max-h-56 overflow-auto rounded-md border border-border/60">
+                          {contacts
+                            .filter((c) => !members.some((m) => m.subjectId === c.subjectId))
+                            .map((c) => (
+                              <button
+                                key={c.subjectId}
+                                onClick={() => addMember(c.subjectId, c.kind === "agent" ? "editor" : "editor")}
+                                className="flex w-full items-center justify-between px-3 py-2 text-left transition-colors hover:bg-accent/50"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      "inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white",
+                                      c.kind === "agent" ? "bg-violet-500" : "bg-primary"
+                                    )}
+                                  >
+                                    {(c.displayName || c.username).slice(0, 1).toUpperCase()}
+                                  </span>
+                                  <div>
+                                    <div className="text-[12px] font-medium">
+                                      {c.displayName}
+                                      {c.kind === "agent" && (
+                                        <span className="ml-1.5 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-600">
+                                          agent
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="font-mono text-[10px] text-muted-foreground">
+                                      @{c.username} · {c.subjectId}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span className="text-[11px] text-muted-foreground">
+                                  + 加为 editor
+                                </span>
+                              </button>
+                            ))}
+                          {contacts.every((c) =>
+                            members.some((m) => m.subjectId === c.subjectId)
+                          ) && (
+                            <div className="p-3 text-[11px] text-muted-foreground">
+                              所有联系人已在项目里
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={newMemberId}
+                        onChange={(e) => setNewMemberId(e.target.value)}
+                        placeholder="u123 或 a456"
+                        className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[12px] outline-none focus:ring-1 focus:ring-primary"
+                      />
+                      <select
+                        value={newMemberRole}
+                        onChange={(e) => setNewMemberRole(e.target.value as "viewer" | "editor")}
+                        className="rounded-md border border-border bg-background px-2 py-1.5 text-[12px] outline-none"
+                      >
+                        <option value="editor">editor</option>
+                        <option value="viewer">viewer</option>
+                      </select>
+                      <button
+                        onClick={() => addMember()}
+                        className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground"
+                      >
+                        添加
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 text-[10px] leading-relaxed text-muted-foreground/80">
                   添加 <code className="font-mono">a*</code> subject 后会自动展开接入指南 —— 复制给 agent 即可。
