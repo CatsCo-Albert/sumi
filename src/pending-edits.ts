@@ -1,0 +1,197 @@
+/**
+ * Pending edits — agent-proposed changes awaiting human review.
+ *
+ * Distilled from paperanim's storage model but adapted to Sumi:
+ *   - sqlite table (not S3/JSON blob)
+ *   - one row per pending edit (not a per-user blob)
+ *   - tied to (projectId, fileId, targetUserId) — each collaborator has
+ *     their own pending queue
+ */
+
+import crypto from "crypto";
+import type { DatabaseSync } from "node:sqlite";
+import type { EditBlock } from "./server/edit-position-tracker";
+
+export interface PendingEditRow {
+  id: string;
+  projectId: string;
+  fileId: string;
+  userId: string;          // subject this edit was proposed FOR (the reviewer)
+  authorId: string;
+  authorName: string | null;
+  description: string | null;
+  blocks: EditBlock[];
+  status: "pending" | "applying" | "applied" | "rejected";
+  createdAt: number;
+  updatedAt: number;
+}
+
+const id = () =>
+  `edit_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+
+// ---------------------------------------------------------------------------
+// CRUD
+// ---------------------------------------------------------------------------
+
+export function addPendingEdit(
+  db: DatabaseSync,
+  input: {
+    projectId: string;
+    fileId: string;
+    userId: string;
+    authorId: string;
+    authorName?: string;
+    description?: string;
+    blocks: EditBlock[];
+  }
+): PendingEditRow[] {
+  // One PendingEdit row per block — so the reviewer can keep/reject each chunk.
+  const created: PendingEditRow[] = [];
+  const now = Date.now();
+  const insert = db.prepare(
+    `INSERT INTO pending_edits
+       (id, project_id, file_id, user_id, author_id, author_name, description, blocks, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+  );
+  for (let i = 0; i < input.blocks.length; i++) {
+    const editId = `${id()}_${i}`;
+    insert.run(
+      editId,
+      input.projectId,
+      input.fileId,
+      input.userId,
+      input.authorId,
+      input.authorName ?? null,
+      input.description ?? null,
+      JSON.stringify([input.blocks[i]]),
+      now + i,
+      now + i
+    );
+    created.push({
+      id: editId,
+      projectId: input.projectId,
+      fileId: input.fileId,
+      userId: input.userId,
+      authorId: input.authorId,
+      authorName: input.authorName ?? null,
+      description: input.description ?? null,
+      blocks: [input.blocks[i]],
+      status: "pending",
+      createdAt: now + i,
+      updatedAt: now + i,
+    });
+  }
+  return created;
+}
+
+export function listPendingEdits(
+  db: DatabaseSync,
+  input: { projectId: string; userId: string; fileId?: string }
+): PendingEditRow[] {
+  const sql = input.fileId
+    ? `SELECT * FROM pending_edits
+       WHERE project_id = ? AND user_id = ? AND file_id = ? AND status = 'pending'
+       ORDER BY created_at ASC`
+    : `SELECT * FROM pending_edits
+       WHERE project_id = ? AND user_id = ? AND status = 'pending'
+       ORDER BY created_at ASC`;
+  const rows = (input.fileId
+    ? db.prepare(sql).all(input.projectId, input.userId, input.fileId)
+    : db.prepare(sql).all(input.projectId, input.userId)) as Array<{
+    id: string;
+    project_id: string;
+    file_id: string;
+    user_id: string;
+    author_id: string;
+    author_name: string | null;
+    description: string | null;
+    blocks: string;
+    status: string;
+    created_at: number;
+    updated_at: number;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    projectId: r.project_id,
+    fileId: r.file_id,
+    userId: r.user_id,
+    authorId: r.author_id,
+    authorName: r.author_name,
+    description: r.description,
+    blocks: JSON.parse(r.blocks) as EditBlock[],
+    status: r.status as PendingEditRow["status"],
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export function getPendingEdit(
+  db: DatabaseSync,
+  editId: string
+): PendingEditRow | null {
+  const r = db
+    .prepare(`SELECT * FROM pending_edits WHERE id = ?`)
+    .get(editId) as
+    | {
+        id: string;
+        project_id: string;
+        file_id: string;
+        user_id: string;
+        author_id: string;
+        author_name: string | null;
+        description: string | null;
+        blocks: string;
+        status: string;
+        created_at: number;
+        updated_at: number;
+      }
+    | undefined;
+  if (!r) return null;
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    fileId: r.file_id,
+    userId: r.user_id,
+    authorId: r.author_id,
+    authorName: r.author_name,
+    description: r.description,
+    blocks: JSON.parse(r.blocks) as EditBlock[],
+    status: r.status as PendingEditRow["status"],
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+export function updatePendingEditStatus(
+  db: DatabaseSync,
+  editId: string,
+  status: "applying" | "applied" | "rejected"
+): boolean {
+  const res = db
+    .prepare(
+      "UPDATE pending_edits SET status = ?, updated_at = ? WHERE id = ?"
+    )
+    .run(status, Date.now(), editId);
+  return res.changes > 0;
+}
+
+export function deletePendingEdit(
+  db: DatabaseSync,
+  editId: string
+): boolean {
+  const res = db.prepare("DELETE FROM pending_edits WHERE id = ?").run(editId);
+  return res.changes > 0;
+}
+
+/** All members of a project that should see an edit notification. */
+export function listMemberSubjects(
+  db: DatabaseSync,
+  projectId: string
+): string[] {
+  const rows = db
+    .prepare(
+      "SELECT subject_id AS subjectId FROM project_members WHERE project_id = ?"
+    )
+    .all(projectId) as Array<{ subjectId: string }>;
+  return rows.map((r) => r.subjectId);
+}

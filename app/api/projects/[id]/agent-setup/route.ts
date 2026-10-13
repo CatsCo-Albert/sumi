@@ -120,6 +120,13 @@ export async function GET(
     `- 需要写新文件？POST /api/projects/${projectId}/documents { fileId, title }`,
     `- 直接改文件不走 Yjs？PUT /api/documents/content —— 带 baseContentHash 做乐观锁，`,
     `  409 FILE_CONFLICT 时先重新 GET 再决定覆盖`,
+    `- 提议修改让人类审阅？POST /api/pending-edits {`,
+    `    projectId: "${projectId}",`,
+    `    fileId: "${fileId}",`,
+    `    blocks: [{ startLine, endLine, updated }],   // 行号 1-based`,
+    `    description: "这段改动意图…"`,
+    `  }`,
+    `  —— 修改会以「待审核」状态出现在用户编辑器里，让他们点「保留/撤销」`,
   ].join("\n");
 
   return Response.json({

@@ -19,10 +19,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const { projectId, filePath, blocks } = (await request.json()) as {
+  const { projectId, filePath, blocks, editId } = (await request.json()) as {
     projectId?: string;
     filePath?: string;
     blocks?: Array<{ startLine: number; endLine: number; updated: string }>;
+    editId?: string;
   };
 
   if (!projectId || !filePath || !Array.isArray(blocks)) {
@@ -59,6 +60,13 @@ export async function POST(request: Request) {
         { status: res.status }
       );
     }
+
+    // Mark the pending edit as applied (best-effort — UI already updated).
+    if (editId) {
+      const { updatePendingEditStatus } = await import("@/src/pending-edits");
+      updatePendingEditStatus(db, editId, "applied");
+    }
+
     return Response.json({ ok: true, roomName: `${projectId}-${filePath}` });
   } catch (err) {
     return Response.json(

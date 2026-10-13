@@ -11,6 +11,7 @@
 
 import { useEffect, useRef } from "react";
 import { useUiStore } from "@/stores/ui-store";
+import { useEditStore } from "@/stores/edit-store";
 import { validateUiPatch } from "@/src/a2ui/validate";
 import { getStoredToken } from "./use-session";
 
@@ -46,7 +47,46 @@ export function useUiEvents({
       try {
         const payload = JSON.parse((e as MessageEvent).data);
         const patch = validateUiPatch(payload);
-        if (patch) applyUiPatch(patch);
+        if (!patch) return;
+        applyUiPatch(patch);
+
+        // Hydrate the pending-edit store for diff decorations.
+        if (patch.type === "pending_edit_changed") {
+          const editStore = useEditStore.getState();
+          if (patch.edit === null) {
+            // Edit was removed (rejected / applied / cleaned up). The apply path
+            // already clears it locally on accept — this catches rejections
+            // and remote cleanups.
+            // We can't know which edit without an id, so re-fetch the list.
+            void refetchPendingEdits(patch.projectId, patch.fileId);
+          } else {
+            const e0 = patch.edit as {
+              id?: string;
+              projectId?: string;
+              filePath?: string;
+              fileId?: string;
+              blocks?: unknown[];
+              description?: string;
+              status?: string;
+              createdAt?: number;
+              authorId?: string;
+              authorName?: string;
+            };
+            if (e0.id && e0.projectId) {
+              editStore.upsertPendingEdit({
+                id: e0.id,
+                projectId: e0.projectId,
+                filePath: (e0.filePath ?? e0.fileId ?? patch.fileId) as string,
+                blocks: (e0.blocks ?? []) as never,
+                description: e0.description,
+                status: "pending",
+                createdAt: e0.createdAt ?? Date.now(),
+                authorId: e0.authorId,
+                authorName: e0.authorName,
+              });
+            }
+          }
+        }
       } catch {
         // drop malformed frames
       }
@@ -57,4 +97,23 @@ export function useUiEvents({
       sourceRef.current = null;
     };
   }, [endpoint, projectId, enabled, applyUiPatch]);
+}
+
+// ---------------------------------------------------------------------------
+// Pending-edit refetch — called when a `pending_edit_changed` patch has
+// `edit: null` (deletion signal; we need to refresh the whole list).
+// ---------------------------------------------------------------------------
+
+async function refetchPendingEdits(projectId: string, fileId?: string): Promise<void> {
+  const url = new URL("/api/pending-edits", window.location.origin);
+  url.searchParams.set("projectId", projectId);
+  if (fileId) url.searchParams.set("fileId", fileId);
+  const token = getStoredToken();
+  if (!token) return;
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  }).catch(() => null);
+  if (!res?.ok) return;
+  const { edits } = await res.json();
+  useEditStore.getState().setPendingEdits(edits ?? []);
 }

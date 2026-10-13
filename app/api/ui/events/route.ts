@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   if (!actor) {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
-  const userId = `${actor.kind}:${actor.id}`;
+  const userId = actor.id;
   const url = new URL(request.url);
   const projectFilter = url.searchParams.get("projectId") || "";
 

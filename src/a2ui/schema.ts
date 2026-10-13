@@ -41,6 +41,16 @@ export type UiPatch =
     }
   | { type: "queue_prompt"; prompt: string; autoSend?: boolean }
   | { type: "focus_document_range"; documentId: string; startLine: number; endLine: number }
+  | {
+      /** A pending edit proposal was added/removed for a doc in this project.
+       *  Consumers hydrate `useEditStore.pendingEdits` from the payload. */
+      type: "pending_edit_changed";
+      projectId: string;
+      /** fileId (path inside project). */
+      fileId: string;
+      /** Full pending edit payload, or null when removed. */
+      edit: unknown | null;
+    }
   | { type: "noop" };
 
 // ---------------------------------------------------------------------------

@@ -62,6 +62,31 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
     `,
   },
+  {
+    version: 2,
+    sql: `
+      -- Pending edits proposed by agents/users awaiting human review.
+      -- One row per pending edit; content is a JSON blob (blocks + relpos).
+      -- Keyed by (project_id, file_id) so multiple edits can queue per file,
+      -- and by user_id so different users see their own pending sets.
+      CREATE TABLE IF NOT EXISTS pending_edits (
+        id           TEXT PRIMARY KEY,         -- "edit_<ts>_<rand>"
+        project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        file_id      TEXT NOT NULL,
+        user_id      TEXT NOT NULL,            -- subject this edit was proposed FOR
+        author_id    TEXT NOT NULL,            -- subject that proposed it (usually agent)
+        author_name  TEXT,
+        description  TEXT,
+        blocks       TEXT NOT NULL,            -- JSON array of EditBlock
+        status       TEXT NOT NULL CHECK (status IN ('pending','applying','applied','rejected'))
+                     DEFAULT 'pending',
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pending_edits_scope
+        ON pending_edits(project_id, file_id, user_id, status);
+    `,
+  },
 ];
 
 export async function getDb(): Promise<DatabaseSync> {

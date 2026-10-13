@@ -103,7 +103,10 @@ GET  /api/projects/:id/agent-setup?subjectId=a42&fileId=… → copy-paste agent
 GET  /api/documents/content?projectId&filePath          → { content, contentHash }
 PUT  /api/documents/content  { projectId, filePath, content, baseContentHash? }
      → 200 { contentHash }  |  409 { errorCode: "FILE_CONFLICT", currentHash }
-POST /api/edits/apply          { projectId, filePath, blocks }
+POST /api/edits/apply          { projectId, filePath, blocks, editId? }
+POST /api/pending-edits        { projectId, fileId, blocks, targetUserId?, description? }
+GET  /api/pending-edits?projectId&fileId                  → reviewer's pending queue
+DELETE /api/pending-edits      { editId }                                       (reviewer only)
 POST /api/ui/publish           { userId, projectId, patch }
 GET  /api/ui/events                                  → SSE
 ```
@@ -140,6 +143,7 @@ Working:
 - Preview — source / split / rendered markdown toggle in the editor chrome
 - Selection → AI — `⌘K` on a selection pushes it into the omni dock as a queued prompt
 - Optimistic concurrency — `baseContentHash` guards the canonical blob; 409 → client re-GETs hash and retries once
+- Pending edits — agents `POST /api/pending-edits` with line-number blocks; each row is broadcast via SSE (`pending_edit_changed`), lands in `useEditStore`, renders as inline diff decorations with 保留/撤销 buttons. Accept → `POST /api/edits/apply` pushes into Yjs + marks row applied. Reject → DELETE marks row rejected.
 - Agent onboarding — `GET /api/projects/:id/agent-setup` returns copy-pasteable instructions (`connectSumi()` + Y.Text edit API + env vars); UI exposes it from the member panel
 
 Stubbed / missing:

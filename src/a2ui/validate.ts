@@ -35,6 +35,12 @@ const uiPatchSchema = z.union([
     startLine: z.number().int().min(1),
     endLine: z.number().int().min(1),
   }),
+  z.object({
+    type: z.literal("pending_edit_changed"),
+    projectId: z.string().min(1),
+    fileId: z.string().min(1),
+    edit: z.unknown().nullable(),
+  }),
   z.object({ type: z.literal("noop") }),
 ]);
 

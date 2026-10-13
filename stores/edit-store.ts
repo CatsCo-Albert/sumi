@@ -16,6 +16,7 @@
 import { create } from "zustand";
 import * as Y from "yjs";
 import type { EditBlock, RelativePositionJSON } from "@/src/server/edit-position-tracker";
+import { getAuthHeaders } from "@/lib/use-session";
 
 export interface PendingEdit {
   id: string;
@@ -208,7 +209,7 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
 
       const res = await fetch("/api/edits/apply", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: edit.projectId,
           filePath: edit.filePath,
@@ -232,6 +233,13 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
 
       const cb = get().syncLocksCallback;
       if (cb) cb(get().getPendingLocks());
+
+      // Mark server-side row as applied so the pending queue stays clean.
+      fetch("/api/pending-edits", {
+        method: "DELETE",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ editId }),
+      }).catch(() => undefined);
     } catch {
       set((state) => ({
         pendingEdits: state.pendingEdits.map((e) =>
@@ -247,5 +255,11 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
     }));
     const cb = get().syncLocksCallback;
     if (cb) cb(get().getPendingLocks());
+    // Mark as rejected server-side so the queue stays consistent.
+    fetch("/api/pending-edits", {
+      method: "DELETE",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ editId }),
+    }).catch(() => undefined);
   },
 }));
