@@ -23,6 +23,8 @@ export interface StorageProvider {
   download(key: string): Promise<Buffer>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
+  /** Metadata for a single object, or null when it is absent or not a file. */
+  stat(key: string): Promise<FileInfo | null>;
   list(prefix: string): Promise<FileInfo[]>;
   deletePrefix(prefix: string): Promise<void>;
 }
@@ -92,6 +94,27 @@ export class LocalStorageProvider implements StorageProvider {
       return (await fs.stat(this.getFullPath(key))).isFile();
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Metadata for one object. Distinct from `list`, which walks a *directory*:
+   * calling list on a file path makes readdir throw ENOTDIR and the caller gets
+   * a 500 instead of the metadata it wanted.
+   */
+  async stat(key: string): Promise<FileInfo | null> {
+    const fullPath = this.getFullPath(key);
+    try {
+      const stats = await fs.stat(fullPath);
+      if (!stats.isFile()) return null;
+      return {
+        key,
+        size: stats.size,
+        lastModified: stats.mtime,
+        contentType: getMimeType(key),
+      };
+    } catch {
+      return null;
     }
   }
 
