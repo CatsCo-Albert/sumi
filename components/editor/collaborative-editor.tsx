@@ -45,6 +45,7 @@ import { lintKeymap } from "@codemirror/lint";
 import * as Y from "yjs";
 import { yCollab } from "y-codemirror.next";
 import { WebsocketProvider } from "y-websocket";
+import { IndexeddbPersistence } from "y-indexeddb";
 
 import {
   getUserColorById,
@@ -190,6 +191,13 @@ export default function CollaborativeEditor({
       params: token ? { token } : {},
     });
     providerRef.current = provider;
+
+    // Offline persistence — IndexedDB mirror of the Yjs doc. Even if the WS
+    // is unreachable, edits land in local storage and sync up on reconnect.
+    let idbPersistence: IndexeddbPersistence | null = null;
+    if (typeof window !== "undefined" && window.indexedDB) {
+      idbPersistence = new IndexeddbPersistence(`sumi-doc-${roomName}`, ydoc);
+    }
 
     const userColor = userId ? getUserColorById(userId) : generateUserColor();
     const displayName = userName || generateUserName();
@@ -378,6 +386,7 @@ export default function CollaborativeEditor({
       view.destroy();
       provider.awareness.off("change", updateCollaborators);
       provider.destroy();
+      idbPersistence?.destroy();
       ydoc.destroy();
       viewRef.current = null;
       providerRef.current = null;

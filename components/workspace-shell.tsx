@@ -10,14 +10,16 @@
  * blur only on the floating surface.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import type { EditorView } from "@codemirror/view";
 import { useSession } from "@/lib/use-session";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
 import DocumentListPane from "@/components/document-list-pane";
+import MarkdownPreview from "@/components/markdown-preview";
 import { useDocPersistence } from "@/lib/use-doc-persistence";
 
 export default function WorkspaceShell() {
@@ -107,6 +109,8 @@ export default function WorkspaceShell() {
 // Editor pane
 // ---------------------------------------------------------------------------
 
+type EditorViewMode = "source" | "preview" | "split";
+
 function EditorPane({
   documentId,
   attention,
@@ -118,8 +122,40 @@ function EditorPane({
 }) {
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
+  const [viewMode, setViewMode] = useState<EditorViewMode>("source");
+  const [currentContent, setCurrentContent] = useState("");
+  const editorViewRef = useRef<EditorView | null>(null);
+  const applyUiPatch = useUiStore((s) => s.applyUiPatch);
   const { initialContent, loading, scheduleSave, lastSavedAt, error, conflicted } =
     useDocPersistence(projectId, fileId);
+
+  const handleContentChange = (content: string) => {
+    setCurrentContent(content);
+    scheduleSave(content);
+  };
+
+  // Cmd+K — grab current selection, push it into the AI dock as a prompt.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        const view = editorViewRef.current;
+        if (!view) return;
+        const sel = view.state.selection.main;
+        const selected = view.state.sliceDoc(sel.from, sel.to);
+        if (!selected.trim()) return;
+        e.preventDefault();
+        const prompt = `在文档 ${fileId} 中，请处理这段内容：\n\n\`\`\`\n${selected}\n\`\`\`\n\n`;
+        applyUiPatch({
+          type: "queue_prompt",
+          prompt,
+          autoSend: false,
+        });
+        applyUiPatch({ type: "set_panel_visibility", panel: "ai", visible: true });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [fileId, applyUiPatch]);
 
   return (
     <div
@@ -132,6 +168,23 @@ function EditorPane({
       <header className="flex h-11 items-center gap-3 border-b border-border/60 px-4">
         <div className="text-[13px] font-medium text-muted-foreground">
           {fileId.split("/").pop() || fileId}
+        </div>
+        {/* View mode toggle */}
+        <div className="flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
+          {(["source", "split", "preview"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setViewMode(m)}
+              className={cn(
+                "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+                viewMode === m
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {m === "source" ? "源码" : m === "split" ? "双栏" : "预览"}
+            </button>
+          ))}
         </div>
         {/* Save indicator */}
         <div className="text-[10px] text-muted-foreground/60">
@@ -167,6 +220,31 @@ function EditorPane({
       <div className="flex-1 overflow-hidden">
         {loading ? (
           <LoadingPane />
+        ) : viewMode === "preview" ? (
+          <MarkdownPreview
+            content={currentContent || initialContent || ""}
+            className="h-full overflow-auto"
+          />
+        ) : viewMode === "split" ? (
+          <div className="flex h-full">
+            <div className="flex-1 overflow-hidden border-r border-border/60">
+              <CollaborativeEditor
+                projectId={projectId}
+                fileId={fileId}
+                mode="markdown"
+                userId={actor.id}
+                userName={actor.name}
+                initialContent={initialContent ?? ""}
+                prefillOnConnect
+                onContentChange={handleContentChange}
+                onCollaboratorsChange={setCollaborators}
+                onEditorReady={(v) => (editorViewRef.current = v)}
+              />
+            </div>
+            <div className="flex-1 overflow-auto bg-background">
+              <MarkdownPreview content={currentContent || initialContent || ""} />
+            </div>
+          </div>
         ) : (
           <CollaborativeEditor
             projectId={projectId}
@@ -176,8 +254,9 @@ function EditorPane({
             userName={actor.name}
             initialContent={initialContent ?? ""}
             prefillOnConnect
-            onContentChange={scheduleSave}
+            onContentChange={handleContentChange}
             onCollaboratorsChange={setCollaborators}
+            onEditorReady={(v) => (editorViewRef.current = v)}
           />
         )}
       </div>

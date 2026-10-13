@@ -136,6 +136,9 @@ Working:
 - Project/doc delete — cascades via `ON DELETE CASCADE`
 - Doc rename — `PATCH /api/projects/:id/documents` updates `fileId`/`title` and moves the storage file
 - Editor — CodeMirror + yCollab + awareness carets; autosaves canonical markdown to `/api/documents/content` (2s debounce)
+- Offline — `y-indexeddb` mirrors every doc locally; edits survive reload + reconnect
+- Preview — source / split / rendered markdown toggle in the editor chrome
+- Selection → AI — `⌘K` on a selection pushes it into the omni dock as a queued prompt
 - Optimistic concurrency — `baseContentHash` guards the canonical blob; 409 → client re-GETs hash and retries once
 - Agent onboarding — `GET /api/projects/:id/agent-setup` returns copy-pasteable instructions (`connectSumi()` + Y.Text edit API + env vars); UI exposes it from the member panel
 
