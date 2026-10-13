@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { apiPath } from "@/lib/api-path";
 import { useSearchParams } from "next/navigation";
 import type { EditorView } from "@codemirror/view";
 import { useSession } from "@/lib/use-session";
@@ -282,7 +283,7 @@ function SignInPane() {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/me", {
+      const res = await fetch(apiPath("/api/auth/me"), {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
       if (!res.ok) {

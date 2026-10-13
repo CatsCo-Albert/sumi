@@ -14,6 +14,7 @@ import { useUiStore } from "@/stores/ui-store";
 import { useEditStore } from "@/stores/edit-store";
 import { validateUiPatch } from "@/src/a2ui/validate";
 import { getStoredToken } from "./use-session";
+import { apiPath } from "./api-path";
 
 export interface UseUiEventsOptions {
   /** Optional server filter; the endpoint also accepts this. */
@@ -35,7 +36,7 @@ export function useUiEvents({
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
-    const url = new URL(endpoint, window.location.origin);
+    const url = new URL(apiPath(endpoint), window.location.origin);
     if (projectId) url.searchParams.set("projectId", projectId);
     const token = getStoredToken();
     if (token) url.searchParams.set("token", token);
