@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAuthHeaders } from "@/lib/use-session";
+import { apiPath } from "@/lib/api-path";
 import { cn } from "@/lib/utils";
 
 interface Project {
@@ -49,7 +50,7 @@ export default function DocumentListPane() {
 
   // Load projects on mount
   useEffect(() => {
-    fetch("/api/projects", { headers: getAuthHeaders() })
+    fetch(apiPath("/api/projects"), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { projects: [] }))
       .then((d) => setProjects(d.projects || []))
       .catch(() => setProjects([]));
@@ -62,7 +63,7 @@ export default function DocumentListPane() {
       return;
     }
     setLoadingDocs(true);
-    fetch(`/api/projects/${selected.id}/documents`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${selected.id}/documents`), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { documents: [] }))
       .then((d) => setDocuments(d.documents || []))
       .catch(() => setDocuments([]))
@@ -72,7 +73,7 @@ export default function DocumentListPane() {
   const createProject = async () => {
     if (!newProjectName.trim()) return;
     setError(null);
-    const res = await fetch("/api/projects", {
+    const res = await fetch(apiPath("/api/projects"), {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ name: newProjectName.trim() }),
@@ -92,7 +93,7 @@ export default function DocumentListPane() {
   const createDocument = async () => {
     if (!selected || !newFileId.trim()) return;
     setError(null);
-    const res = await fetch(`/api/projects/${selected.id}/documents`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/documents`), {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -117,7 +118,7 @@ export default function DocumentListPane() {
   // Load members when the members panel opens
   useEffect(() => {
     if (!selected || !showMembers) return;
-    fetch(`/api/projects/${selected.id}/members`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${selected.id}/members`), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { members: [] }))
       .then((d) => setMembers(d.members || []))
       .catch(() => setMembers([]));
@@ -126,7 +127,7 @@ export default function DocumentListPane() {
   const addMember = async () => {
     if (!selected || !newMemberId.trim()) return;
     setError(null);
-    const res = await fetch(`/api/projects/${selected.id}/members`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/members`), {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -141,14 +142,14 @@ export default function DocumentListPane() {
     }
     setNewMemberId("");
     // Refresh
-    fetch(`/api/projects/${selected.id}/members`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${selected.id}/members`), { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => setMembers(d.members || []));
   };
 
   const removeMember = async (subjectId: string) => {
     if (!selected) return;
-    const res = await fetch(`/api/projects/${selected.id}/members`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/members`), {
       method: "DELETE",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ subjectId }),
