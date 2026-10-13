@@ -31,3 +31,23 @@ const NAMES = [
 export function generateUserName(): string {
   return NAMES[Math.floor(Math.random() * NAMES.length)];
 }
+
+/**
+ * Resolve the collaboration WebSocket URL used by the browser editor.
+ *
+ * Precedence: explicit prop → NEXT_PUBLIC_WS_URL → same host on WS_PORT.
+ * The port used to be hard-coded, which silently pointed every non-default
+ * deployment at the wrong port. Behind the artifact gateway the URL must also
+ * include the app prefix, because the gateway routes by that path segment and
+ * strips it before forwarding to the Yjs server.
+ */
+export function resolveWsUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_WS_URL;
+  if (configured) return configured;
+
+  if (typeof window === "undefined") return "ws://localhost:12345";
+
+  const port = process.env.NEXT_PUBLIC_WS_PORT || "12345";
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${scheme}//${location.hostname}:${port}`;
+}

@@ -15,9 +15,12 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { getAuthHeaders } from "@/lib/use-session";
+import { apiPath } from "@/lib/api-path";
 
 const AUTOSAVE_DEBOUNCE_MS = 2_000;
-const SAVE_ENDPOINT = "/api/documents/content";
+// Prefixed at module load: behind the artifact gateway a bare path resolves
+// against the gateway root, which strips /<app-id>/ before forwarding.
+const SAVE_ENDPOINT = apiPath("/api/documents/content");
 
 export interface PersistenceState {
   /** Loaded once from canonical storage — pass to `initialContent`. */

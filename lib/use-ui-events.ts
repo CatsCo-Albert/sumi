@@ -106,7 +106,7 @@ export function useUiEvents({
 // ---------------------------------------------------------------------------
 
 async function refetchPendingEdits(projectId: string, fileId?: string): Promise<void> {
-  const url = new URL("/api/pending-edits", window.location.origin);
+  const url = new URL(apiPath("/api/pending-edits"), window.location.origin);
   url.searchParams.set("projectId", projectId);
   if (fileId) url.searchParams.set("fileId", fileId);
   const token = getStoredToken();

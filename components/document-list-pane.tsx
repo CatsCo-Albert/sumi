@@ -288,7 +288,7 @@ export default function DocumentListPane() {
       ? `subjectId=${subjectId}&fileId=${encodeURIComponent(targetFile)}`
       : `subjectId=${subjectId}`;
     const res = await fetch(
-      `/api/projects/${selected.id}/agent-setup?${params}`,
+      apiPath(`/api/projects/${selected.id}/agent-setup?${params}`),
       { headers: getAuthHeaders() }
     );
     if (res.ok) {

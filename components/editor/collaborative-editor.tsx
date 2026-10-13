@@ -51,6 +51,7 @@ import {
   getUserColorById,
   generateUserColor,
   generateUserName,
+  resolveWsUrl,
 } from "@/lib/utils";
 import { createMarkdownExtensions, createHtmlExtensions } from "./markdown-extensions";
 import { getInlineDiffExtensions, setCurrentFile, setYjsRefs as setDiffYjsRefs } from "./inline-diff-extension";
@@ -142,12 +143,10 @@ export default function CollaborativeEditor({
     initialContentRef.current = initialContent;
   });
 
-  const effectiveWsUrl =
-    wsUrl ||
-    (typeof window !== "undefined"
-      ? process.env.NEXT_PUBLIC_SUMI_WS_URL ||
-        `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.hostname}:12345`
-      : "ws://localhost:12345");
+  // Explicit prop wins; otherwise the deployment's configured URL. Behind the
+  // artifact gateway that URL must carry the app prefix, because the gateway
+  // routes by that path segment — a bare host:port would reach nothing.
+  const effectiveWsUrl = wsUrl || resolveWsUrl();
 
   // --- Restore token: wipe and re-seed --------------------------------------
   useEffect(() => {
