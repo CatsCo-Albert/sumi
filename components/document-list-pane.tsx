@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAuthHeaders } from "@/lib/use-session";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 interface Project {
@@ -78,6 +79,7 @@ export default function DocumentListPane() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [addMemberMode, setAddMemberMode] = useState<"picker" | "manual">("picker");
+  const [busyActions, setBusyActions] = useState<Set<string>>(new Set());
 
   // Load projects + whoami on mount
   useEffect(() => {
@@ -128,7 +130,21 @@ export default function DocumentListPane() {
 
   const isOwner = selected && sessionSubjectId && selected.ownerUid === sessionSubjectId;
 
-  const createProject = async () => {
+  const withBusy = async <T,>(key: string, fn: () => Promise<T>): Promise<T | undefined> => {
+    if (busyActions.has(key)) return;
+    setBusyActions((s) => new Set(s).add(key));
+    try {
+      return await fn();
+    } finally {
+      setBusyActions((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  const createProject = () => withBusy("create-project", async () => {
     if (!newProjectName.trim()) return;
     setError(null);
     const res = await fetch("/api/projects", {
@@ -139,6 +155,7 @@ export default function DocumentListPane() {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "failed");
+      toast({ title: "创建项目失败", description: data.error, variant: "destructive" });
       return;
     }
     const { project } = await res.json();
@@ -146,9 +163,10 @@ export default function DocumentListPane() {
     setNewProjectName("");
     setShowNewProject(false);
     setSelected(project);
-  };
+    toast({ title: "项目已创建", description: project.name, variant: "success" });
+  });
 
-  const deleteProject = async () => {
+  const deleteProject = () => withBusy("delete-project", async () => {
     if (!selected) return;
     const res = await fetch(`/api/projects/${selected.id}`, {
       method: "DELETE",
@@ -157,14 +175,17 @@ export default function DocumentListPane() {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "failed");
+      toast({ title: "删除项目失败", description: data.error, variant: "destructive" });
       return;
     }
+    const name = selected.name;
     setProjects((p) => p.filter((x) => x.id !== selected.id));
     setSelected(null);
     setConfirmDeleteProject(false);
-  };
+    toast({ title: "项目已删除", description: name, variant: "success" });
+  });
 
-  const createDocument = async () => {
+  const createDocument = () => withBusy("create-doc", async () => {
     if (!selected || !newFileId.trim()) return;
     setError(null);
     const res = await fetch(`/api/projects/${selected.id}/documents`, {
@@ -185,8 +206,9 @@ export default function DocumentListPane() {
     setNewFileId("");
     setNewTitle("");
     setShowNewDoc(false);
+    toast({ title: "文档已创建", description: document.fileId, variant: "success" });
     router.push(`/?doc=${document.id}`);
-  };
+  });
 
   const deleteDocument = async (doc: Document) => {
     if (!selected) return;
@@ -197,6 +219,10 @@ export default function DocumentListPane() {
     });
     if (res.ok) {
       setDocuments((d) => d.filter((x) => x.id !== doc.id));
+      toast({ title: "文档已删除", description: doc.fileId, variant: "success" });
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast({ title: "删除失败", description: data.error, variant: "destructive" });
     }
     setConfirmDeleteDoc(null);
   };
@@ -225,9 +251,11 @@ export default function DocumentListPane() {
       setDocuments((d) =>
         d.map((x) => (x.id === renamingDoc ? document : x))
       );
+      toast({ title: "已重命名", description: document.fileId, variant: "success" });
     } else {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "rename failed");
+      toast({ title: "重命名失败", description: data.error, variant: "destructive" });
     }
     setRenamingDoc(null);
   };
@@ -248,6 +276,7 @@ export default function DocumentListPane() {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error || "failed");
+      toast({ title: "添加成员失败", description: data.error, variant: "destructive" });
       return;
     }
     setNewMemberId("");
@@ -258,6 +287,11 @@ export default function DocumentListPane() {
     if (subjectId.startsWith("a")) {
       toggleAgentSetup(subjectId);
     }
+    toast({
+      title: "成员已加入",
+      description: subjectId,
+      variant: "success",
+    });
   };
 
   const removeMember = async (subjectId: string) => {
@@ -273,6 +307,10 @@ export default function DocumentListPane() {
         setAgentSetupFor(null);
         setAgentSetup(null);
       }
+      toast({ title: "成员已移除", description: subjectId, variant: "success" });
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast({ title: "移除失败", description: data.error, variant: "destructive" });
     }
   };
 
@@ -290,6 +328,13 @@ export default function DocumentListPane() {
           x.subjectId === subjectId ? { ...x, status: next } : x
         )
       );
+      toast({
+        title: next === "disabled" ? "agent 已禁用" : "agent 已启用",
+        description: subjectId,
+        variant: "success",
+      });
+    } else {
+      toast({ title: "操作失败", variant: "destructive" });
     }
   };
 
@@ -322,8 +367,9 @@ export default function DocumentListPane() {
       await navigator.clipboard.writeText(agentSetup.instructions);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
+      toast({ title: "接入指南已复制", variant: "success" });
     } catch {
-      /* ignore */
+      toast({ title: "复制失败", variant: "destructive" });
     }
   };
 
@@ -349,17 +395,18 @@ export default function DocumentListPane() {
         <div className="overflow-auto">
           {showNewProject && (
             <div className="border-b border-border/60 p-3">
-              <input
-                autoFocus
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") createProject();
-                  if (e.key === "Escape") setShowNewProject(false);
-                }}
-                placeholder="项目名称"
-                className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] outline-none focus:ring-1 focus:ring-primary"
-              />
+                  <input
+                    autoFocus
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") createProject();
+                      if (e.key === "Escape") setShowNewProject(false);
+                    }}
+                    placeholder="项目名称"
+                    disabled={busyActions.has("create-project")}
+                    className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                  />
             </div>
           )}
           {projects.map((p) => (
@@ -452,9 +499,10 @@ export default function DocumentListPane() {
                     </button>
                     <button
                       onClick={deleteProject}
-                      className="rounded-md bg-destructive px-3 py-1 text-[11px] font-medium text-destructive-foreground"
+                      disabled={busyActions.has("delete-project")}
+                      className="rounded-md bg-destructive px-3 py-1 text-[11px] font-medium text-destructive-foreground disabled:opacity-50"
                     >
-                      确认删除
+                      {busyActions.has("delete-project") ? "删除中…" : "确认删除"}
                     </button>
                   </div>
                 </div>
@@ -704,7 +752,8 @@ export default function DocumentListPane() {
                       </select>
                       <button
                         onClick={() => addMember()}
-                        className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground"
+                        disabled={!newMemberId.trim()}
+                        className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
                       >
                         添加
                       </button>
@@ -740,9 +789,10 @@ export default function DocumentListPane() {
                   />
                   <button
                     onClick={createDocument}
-                    className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground"
+                    disabled={busyActions.has("create-doc") || !newFileId.trim()}
+                    className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
                   >
-                    创建
+                    {busyActions.has("create-doc") ? "创建中…" : "创建"}
                   </button>
                 </div>
               </div>

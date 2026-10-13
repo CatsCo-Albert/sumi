@@ -20,6 +20,7 @@ import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
 import DocumentListPane from "@/components/document-list-pane";
 import MarkdownPreview from "@/components/markdown-preview";
+import { Toaster } from "@/components/ui/toast";
 import { useDocPersistence } from "@/lib/use-doc-persistence";
 
 export default function WorkspaceShell() {
@@ -101,6 +102,8 @@ export default function WorkspaceShell() {
           <OmniDock onClose={() => setPanelVisibility("ai", false)} />
         </div>
       </div>
+
+      <Toaster />
     </div>
   );
 }

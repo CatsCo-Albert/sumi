@@ -19,9 +19,12 @@
   --accent-foreground: 240 4% 12%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  /* Apple system blue */
-  --primary: 211 100% 50%;
+  /* Litewrite-inspired cyan accent — slightly desaturated, cooler than Apple blue */
+  --primary: 192 42% 46%;
   --primary-foreground: 0 0% 100%;
+  /* Warm accent for AI/agent surfaces */
+  --warm: 24 88% 68%;
+  --warm-foreground: 24 30% 15%;
   /* hairline */
   --border: 240 6% 90%;
   --input: 240 6% 90%;
@@ -63,8 +66,10 @@
   --accent-foreground: 0 0% 96%;
   --destructive: 0 74% 58%;
   --destructive-foreground: 0 0% 96%;
-  --primary: 210 100% 56%;
+  --primary: 192 45% 52%;
   --primary-foreground: 0 0% 100%;
+  --warm: 24 78% 62%;
+  --warm-foreground: 24 20% 12%;
   --border: 240 4% 20%;
   --input: 240 4% 24%;
   --ring: 210 100% 56%;
