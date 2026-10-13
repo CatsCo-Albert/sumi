@@ -34,11 +34,13 @@ export function useSession(): {
   useEffect(() => {
     let cancelled = false;
     const token = getStoredToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
+
+    // No early return when the token is absent: behind the artifact gateway the
+    // browser holds a viewer cookie instead, which is sent automatically. The
+    // request decides who this is, not the presence of a stored token.
+    fetch("/api/auth/me", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
       .then(async (res) => {
         if (!res.ok) return null;
         const data = await res.json();

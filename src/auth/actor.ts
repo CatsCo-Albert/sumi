@@ -11,6 +11,11 @@
  * ApiKey is verified via CatsCo's `POST /api/account/introspect`
  * (called with our `Service` token).
  *
+ * Neither works when Sumi runs behind the artifact gateway: the browser holds a
+ * gateway viewer cookie, not a Bearer token. In that deployment the cookie is
+ * forwarded to the gateway's own viewer endpoint instead (see ./gateway-viewer),
+ * so the shared secret and the introspection token are not needed at all.
+ *
  * Result carries projectRole — looked up in Sumi's project_members table.
  */
 
@@ -22,6 +27,7 @@ import {
   introspectToken,
   actorKey,
 } from "./catsco";
+import { resolveGatewayViewer, gatewayViewerEnabled } from "./gateway-viewer";
 import { upsertSubject } from "./identity";
 
 export type ActorKind = "user" | "agent";
@@ -80,6 +86,38 @@ export async function resolveActor(
   url: URL
 ): Promise<Actor | null> {
   const cred = extractCredential(req, url);
+
+  // --- Gateway viewer cookie ------------------------------------------------
+  // Behind the artifact gateway there is no Bearer token to find: the browser
+  // holds a viewer cookie that the gateway itself issued. Ask the gateway who
+  // that is. Tried first because in this deployment it is the only credential
+  // that can succeed, and it costs one local-only call.
+  //
+  // Agent sockets still carry ?api_key=, which the gateway forwards untouched,
+  // so an explicit credential always wins over the cookie.
+  if (!cred && gatewayViewerEnabled()) {
+    const viewer = await resolveGatewayViewer(
+      req.headers as Record<string, string | string[] | undefined>
+    );
+    if (viewer) {
+      const subjectId = actorKey("user", viewer.uid);
+      upsertSubjectSafe(db, {
+        subjectId,
+        kind: "user",
+        displayName: viewer.username || subjectId,
+        username: viewer.username,
+      });
+      return {
+        kind: "user",
+        id: subjectId,
+        uid: viewer.uid,
+        name: viewer.username || subjectId,
+        username: viewer.username,
+      };
+    }
+    return null;
+  }
+
   if (!cred) return null;
 
   // --- JWT path (users) -----------------------------------------------------
