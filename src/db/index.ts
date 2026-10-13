@@ -111,6 +111,16 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
       ALTER TABLE subjects ADD COLUMN status TEXT CHECK (status IN ('active','disabled'));
     `,
   },
+  {
+    version: 5,
+    sql: `
+      -- Richer project metadata for the table view.
+      -- tags: JSON array of strings (kept simple; parse on read).
+      ALTER TABLE projects ADD COLUMN description TEXT;
+      ALTER TABLE projects ADD COLUMN tags TEXT;
+      ALTER TABLE projects ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export async function getDb(): Promise<DatabaseSync> {

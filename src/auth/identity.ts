@@ -89,8 +89,25 @@ export interface ProjectRow {
   id: string;
   name: string;
   ownerUid: string;
+  description?: string | null;
+  tags?: string[];
+  archived?: boolean;
+  /** Only populated by listProjectsForSubject. */
+  memberCount?: number;
+  ownerDisplayName?: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/** Parse the projects.tags JSON blob (array of strings). */
+function parseTags(raw: unknown): string[] | undefined {
+  if (typeof raw !== "string" || !raw) return undefined;
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((t) => typeof t === "string") : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function createProject(
@@ -118,11 +135,13 @@ export function createProject(
 export function getProject(db: DatabaseSync, projectId: string): ProjectRow | null {
   const row = db
     .prepare(
-      `SELECT id, name, owner_uid AS ownerUid, created_at AS createdAt, updated_at AS updatedAt
+      `SELECT id, name, owner_uid AS ownerUid, description, tags,
+              archived, created_at AS createdAt, updated_at AS updatedAt
        FROM projects WHERE id = ?`
     )
-    .get(projectId) as ProjectRow | undefined;
-  return row ?? null;
+    .get(projectId) as (Omit<ProjectRow, "tags" | "archived"> & { tags: unknown; archived: number | null }) | undefined;
+  if (!row) return null;
+  return { ...row, tags: parseTags(row.tags), archived: row.archived === 1 };
 }
 
 /** All projects visible to a subject: owned OR member. */
@@ -130,16 +149,28 @@ export function listProjectsForSubject(
   db: DatabaseSync,
   subjectId: string
 ): ProjectRow[] {
-  return db
+  const rows = db
     .prepare(
-      `SELECT p.id, p.name, p.owner_uid AS ownerUid, p.created_at AS createdAt, p.updated_at AS updatedAt
+      `SELECT p.id, p.name, p.owner_uid AS ownerUid, p.description, p.tags,
+              p.archived, p.created_at AS createdAt, p.updated_at AS updatedAt,
+              (SELECT COUNT(*) FROM project_members mc
+                WHERE mc.project_id = p.id) AS memberCount,
+              s.display_name AS ownerDisplayName
        FROM projects p
        LEFT JOIN project_members m
          ON m.project_id = p.id AND m.subject_id = ?
+       LEFT JOIN subjects s ON s.subject_id = p.owner_uid
        WHERE p.owner_uid = ? OR m.role IS NOT NULL
        ORDER BY p.updated_at DESC`
     )
-    .all(subjectId, subjectId) as unknown as ProjectRow[];
+    .all(subjectId, subjectId) as Array<
+      Omit<ProjectRow, "tags" | "archived"> & { tags: unknown; archived: number | null }
+    >;
+  return rows.map((r) => ({
+    ...r,
+    tags: parseTags(r.tags),
+    archived: r.archived === 1,
+  }));
 }
 
 // ---------------------------------------------------------------------------

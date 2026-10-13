@@ -10,11 +10,17 @@ import { useRouter } from "next/navigation";
 import { getAuthHeaders } from "@/lib/use-session";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import ProjectTable from "@/components/project-table";
 
 interface Project {
   id: string;
   name: string;
   ownerUid: string;
+  description?: string | null;
+  tags?: string[];
+  archived?: boolean;
+  memberCount?: number;
+  ownerDisplayName?: string | null;
   updatedAt: number;
 }
 interface Document {
@@ -80,6 +86,24 @@ export default function DocumentListPane() {
   const [contactsLoading, setContactsLoading] = useState(false);
   const [addMemberMode, setAddMemberMode] = useState<"picker" | "manual">("picker");
   const [busyActions, setBusyActions] = useState<Set<string>>(new Set());
+  // list | table — persisted across sessions
+  const [viewMode, setViewMode] = useState<"list" | "table">("list");
+  const [renamingProject, setRenamingProject] = useState(false);
+  const [projectRenameValue, setProjectRenameValue] = useState("");
+
+  useEffect(() => {
+    const v = localStorage.getItem("sumi:proj-view");
+    if (v === "table" || v === "list") setViewMode(v);
+  }, []);
+
+  const switchView = (v: "list" | "table") => {
+    setViewMode(v);
+    try {
+      localStorage.setItem("sumi:proj-view", v);
+    } catch {
+      /* private mode */
+    }
+  };
 
   // Load projects + whoami on mount
   useEffect(() => {
@@ -184,6 +208,127 @@ export default function DocumentListPane() {
     setConfirmDeleteProject(false);
     toast({ title: "项目已删除", description: name, variant: "success" });
   });
+
+  // --- Table-view callbacks -------------------------------------------------
+
+  const patchProject = async (
+    id: string,
+    body: Record<string, unknown>
+  ): Promise<Project | null> => {
+    const res = await fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      toast({
+        title: "更新项目失败",
+        description: data.error,
+        variant: "destructive",
+      });
+      return null;
+    }
+    return (await res.json()).project as Project;
+  };
+
+  const renameProjectById = async (
+    id: string,
+    name: string
+  ): Promise<Project | null> => {
+    const key = `rename-${id}`;
+    if (busyActions.has(key)) return null;
+    setBusyActions((s) => new Set(s).add(key));
+    try {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const next = await patchProject(id, { name: trimmed });
+      if (next) {
+        toast({ title: "已重命名", description: next.name, variant: "success" });
+      }
+      return next;
+    } finally {
+      setBusyActions((s) => {
+        const n = new Set(s);
+        n.delete(key);
+        return n;
+      });
+    }
+  };
+
+  const archiveProjectById = async (
+    id: string,
+    archived: boolean
+  ): Promise<Project | null> => {
+    const key = `archive-${id}`;
+    if (busyActions.has(key)) return null;
+    setBusyActions((s) => new Set(s).add(key));
+    try {
+      const next = await patchProject(id, { archived });
+      if (next) {
+        toast({
+          title: archived ? "项目已归档" : "已取消归档",
+          description: next.name,
+          variant: "success",
+        });
+      }
+      return next;
+    } finally {
+      setBusyActions((s) => {
+        const n = new Set(s);
+        n.delete(key);
+        return n;
+      });
+    }
+  };
+
+  const deleteProjectById = async (id: string): Promise<boolean> => {
+    const key = `delete-${id}`;
+    if (busyActions.has(key)) return false;
+    setBusyActions((s) => new Set(s).add(key));
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({
+          title: "删除项目失败",
+          description: data.error,
+          variant: "destructive",
+        });
+        return false;
+      }
+      const name = projects.find((p) => p.id === id)?.name;
+      toast({ title: "项目已删除", description: name, variant: "success" });
+      return true;
+    } finally {
+      setBusyActions((s) => {
+        const n = new Set(s);
+        n.delete(key);
+        return n;
+      });
+    }
+  };
+
+  const handleProjectsRemoved = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setProjects((p) => p.filter((x) => !idSet.has(x.id)));
+    if (selected && idSet.has(selected.id)) setSelected(null);
+  };
+
+  const handleProjectUpdated = (next: Project) => {
+    setProjects((p) => p.map((x) => (x.id === next.id ? next : x)));
+    if (selected?.id === next.id) setSelected(next);
+  };
+
+  const saveProjectRename = async () => {
+    if (!selected) return;
+    const next = await renameProjectById(selected.id, projectRenameValue);
+    if (next) handleProjectUpdated(next);
+    setRenamingProject(false);
+  };
 
   const createDocument = () => withBusy("create-doc", async () => {
     if (!selected || !newFileId.trim()) return;
@@ -380,10 +525,42 @@ export default function DocumentListPane() {
   return (
     <div className="flex h-full">
       {/* Sidebar — project list */}
-      <aside className="w-64 shrink-0 border-r border-border/60 bg-sidebar text-sidebar-foreground">
+      <aside className={cn(
+        "shrink-0 border-r border-border/60 bg-sidebar text-sidebar-foreground",
+        viewMode === "table" ? "w-[380px]" : "w-64"
+      )}>
         <div className="flex h-11 items-center justify-between border-b border-border/60 px-4">
-          <div className="text-[12px] font-medium text-muted-foreground">
-            项目
+          <div className="flex items-center gap-2">
+            <div className="text-[12px] font-medium text-muted-foreground">
+              项目
+            </div>
+            {/* list / table pill toggle — persisted in localStorage */}
+            <div className="flex items-center rounded-md border border-border/60 p-0.5">
+              <button
+                onClick={() => switchView("list")}
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  viewMode === "list"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground"
+                )}
+                title="列表视图"
+              >
+                列表
+              </button>
+              <button
+                onClick={() => switchView("table")}
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  viewMode === "table"
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground"
+                )}
+                title="表格视图"
+              >
+                表格
+              </button>
+            </div>
           </div>
           <button
             onClick={() => setShowNewProject(true)}
@@ -409,37 +586,65 @@ export default function DocumentListPane() {
                   />
             </div>
           )}
-          {projects.map((p) => (
-            <div
-              key={p.id}
-              className={cn(
-                "group flex items-center justify-between px-4 py-2.5 text-[13px] transition-colors",
-                selected?.id === p.id
-                  ? "bg-accent text-accent-foreground"
-                  : "text-foreground hover:bg-accent/50"
-              )}
-            >
-              <button onClick={() => setSelected(p)} className="flex-1 text-left">
-                {p.name}
-              </button>
-              {sessionSubjectId === p.ownerUid && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelected(p);
-                    setConfirmDeleteProject(true);
-                  }}
-                  className="ml-2 hidden text-[10px] text-muted-foreground/70 hover:text-destructive group-hover:inline"
-                  title="删除项目"
+          {viewMode === "table" ? (
+            <ProjectTable
+              projects={projects}
+              sessionSubjectId={sessionSubjectId}
+              selectedId={selected?.id ?? null}
+              busy={busyActions}
+              onOpen={setSelected}
+              onRename={renameProjectById}
+              onDelete={deleteProjectById}
+              onArchive={archiveProjectById}
+              onRemoved={handleProjectsRemoved}
+              onUpdated={handleProjectUpdated}
+            />
+          ) : (
+            <>
+              {projects.filter((p) => !p.archived).map((p) => (
+                <div
+                  key={p.id}
+                  className={cn(
+                    "group flex items-center justify-between px-4 py-2.5 text-[13px] transition-colors",
+                    selected?.id === p.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-accent/50"
+                  )}
                 >
-                  ✕
-                </button>
-              )}
-            </div>
-          ))}
+                  <button onClick={() => setSelected(p)} className="flex-1 text-left">
+                    {p.name}
+                  </button>
+                  {sessionSubjectId === p.ownerUid && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelected(p);
+                        setConfirmDeleteProject(true);
+                      }}
+                      className="ml-2 hidden text-[10px] text-muted-foreground/70 hover:text-destructive group-hover:inline"
+                      title="删除项目"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
           {projects.length === 0 && !showNewProject && (
-            <div className="p-4 text-[12px] text-muted-foreground">
-              暂无项目，点右上角新建
+            <div className="flex flex-col items-center p-8 text-center">
+              <div className="text-[13px] font-medium text-foreground">
+                还没有项目
+              </div>
+              <div className="mt-1 text-[12px] text-muted-foreground">
+                创建第一个项目开始协作
+              </div>
+              <button
+                onClick={() => setShowNewProject(true)}
+                className="mt-4 rounded-md bg-primary px-4 py-1.5 text-[12px] font-medium text-primary-foreground"
+              >
+                新建项目
+              </button>
             </div>
           )}
         </div>
@@ -461,7 +666,42 @@ export default function DocumentListPane() {
         ) : (
           <>
             <header className="flex h-11 items-center justify-between border-b border-border/60 px-4">
-              <div className="text-[13px] font-medium">{selected.name}</div>
+              <div className="flex items-center gap-2">
+                {renamingProject ? (
+                  <input
+                    autoFocus
+                    value={projectRenameValue}
+                    onChange={(e) => setProjectRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveProjectRename();
+                      if (e.key === "Escape") setRenamingProject(false);
+                    }}
+                    onBlur={saveProjectRename}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-[13px] font-medium outline-none focus:ring-1 focus:ring-primary"
+                  />
+                ) : (
+                  <>
+                    <div className="text-[13px] font-medium">{selected.name}</div>
+                    {isOwner && (
+                      <button
+                        onClick={() => {
+                          setProjectRenameValue(selected.name);
+                          setRenamingProject(true);
+                        }}
+                        className="text-[10px] text-muted-foreground/60 hover:text-foreground"
+                        title="重命名项目"
+                      >
+                        ✎
+                      </button>
+                    )}
+                    {selected.archived && (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+                        已归档
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setShowMembers((v) => !v)}
@@ -807,8 +1047,16 @@ export default function DocumentListPane() {
             {loadingDocs ? (
               <div className="p-4 text-[12px] text-muted-foreground">载入中…</div>
             ) : documents.length === 0 ? (
-              <div className="p-8 text-center text-[13px] text-muted-foreground">
-                这个项目还没有文档
+              <div className="flex flex-col items-center p-8 text-center">
+                <div className="text-[13px] text-muted-foreground">
+                  还没有文档，点击上方「+ 新建文档」
+                </div>
+                <button
+                  onClick={() => setShowNewDoc(true)}
+                  className="mt-3 rounded-md bg-primary px-4 py-1.5 text-[12px] font-medium text-primary-foreground"
+                >
+                  新建文档
+                </button>
               </div>
             ) : (
               <ul className="divide-y divide-border/60">
