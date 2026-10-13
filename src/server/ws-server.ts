@@ -47,6 +47,7 @@ import {
   resolveActor,
   projectRoleFor,
   type Actor,
+  type EffectiveRole,
 } from "../auth/actor";
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,14 @@ import {
 // ---------------------------------------------------------------------------
 
 const PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 1234;
+/**
+ * Opt-in CORS. The management surface used to answer every origin with `*`,
+ * which let any page read the admin endpoints from a browser. WebSocket clients
+ * are unaffected by CORS, so real-time collaboration does not need it.
+ * Set `WS_CORS_ORIGIN` to one exact origin when a browser really must call the
+ * HTTP surface cross-origin.
+ */
+const CORS_ORIGIN = process.env.WS_CORS_ORIGIN || "";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const EMPTY_DOC_CLEANUP_DELAY_MS = 5 * 60_000;
 const INIT_ORPHAN_CLEANUP_DELAY_MS = 30_000;
@@ -142,6 +151,51 @@ function requireInternalSecretOrReply(
     return false;
   }
   return true;
+}
+
+type DocAccess =
+  | { via: "secret" }
+  | { via: "actor"; actor: Actor; role: EffectiveRole };
+
+/**
+ * Gate for the per-document management routes.
+ *
+ * Accepts either the internal secret (server-to-server callers and agent CLIs)
+ * or a resolved CatsCo actor that actually holds a role on the project named in
+ * the URL. Callers that present neither get a 401 and the route does not run.
+ *
+ * Returns null when access was refused; the reply has already been sent.
+ */
+async function requireDocAccessOrReply(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  projectId: string
+): Promise<DocAccess | null> {
+  // Internal secret stays a full-access path — it is how the Next.js layer and
+  // the agent CLIs reach this surface.
+  if (requireInternalSecret(req)) return { via: "secret" };
+
+  let url: URL;
+  try {
+    url = new URL(req.url || "/", "http://localhost");
+  } catch {
+    sendJson(res, 400, { error: "Bad request URL" });
+    return null;
+  }
+
+  try {
+    const db = await getDb();
+    const actor = await resolveActor(db, req, url);
+    const role = actor ? projectRoleFor(db, projectId, actor.id) : null;
+    if (actor && role) {
+      return { via: "actor", actor, role };
+    }
+  } catch (err) {
+    console.error("❌ management auth failed:", err);
+  }
+
+  sendJson(res, 401, { error: "unauthorized" });
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,11 +300,14 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-internal-secret");
+  if (CORS_ORIGIN) {
+    res.setHeader("Access-Control-Allow-Origin", CORS_ORIGIN);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-internal-secret");
+  }
   if (req.method === "OPTIONS") {
-    res.writeHead(200);
+    res.writeHead(CORS_ORIGIN ? 200 : 204);
     res.end();
     return;
   }
@@ -372,6 +429,8 @@ const server = http.createServer(async (req, res) => {
   const docMatch = url.match(/^\/doc\/([^/]+)\/(.+)$/);
   if (req.method === "GET" && docMatch) {
     const [, projectId, fileId] = docMatch;
+    const access = await requireDocAccessOrReply(req, res, projectId);
+    if (!access) return;
     const decodedFileId = decodeURIComponent(fileId);
     const roomName = `${projectId}-${decodedFileId}`;
     const docData = await resolveDocData(roomName);
@@ -379,7 +438,6 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 404, {
         error: "Document not found",
         roomName,
-        availableRooms: Array.from(docs.keys()),
       });
       return;
     }
@@ -396,6 +454,12 @@ const server = http.createServer(async (req, res) => {
   // -- POST /doc/:projectId/:fileId — apply line-based edit blocks ----------
   if (req.method === "POST" && docMatch) {
     const [, projectId, fileId] = docMatch;
+    const access = await requireDocAccessOrReply(req, res, projectId);
+    if (!access) return;
+    if (access.via === "actor" && access.role === "viewer") {
+      sendJson(res, 403, { error: "editor role required" });
+      return;
+    }
     const decodedFileId = decodeURIComponent(fileId);
     const roomName = `${projectId}-${decodedFileId}`;
     const body = await readBody(req);
@@ -454,6 +518,8 @@ const server = http.createServer(async (req, res) => {
   const relposMatch = url.match(/^\/relpos\/([^/]+)\/(.+)$/);
   if (req.method === "POST" && relposMatch) {
     const [, projectId, fileId] = relposMatch;
+    const access = await requireDocAccessOrReply(req, res, projectId);
+    if (!access) return;
     const decodedFileId = decodeURIComponent(fileId);
     const roomName = `${projectId}-${decodedFileId}`;
     const body = await readBody(req);
@@ -547,6 +613,8 @@ const server = http.createServer(async (req, res) => {
   const locksMatch = url.match(/^\/locks\/([^/]+)\/(.+)$/);
   if (req.method === "GET" && locksMatch) {
     const [, projectId, fileId] = locksMatch;
+    const access = await requireDocAccessOrReply(req, res, projectId);
+    if (!access) return;
     const decodedFileId = decodeURIComponent(fileId);
     const roomName = `${projectId}-${decodedFileId}`;
     const docData = docs.get(roomName);
@@ -613,6 +681,8 @@ const server = http.createServer(async (req, res) => {
   const vibeLockMatch = url.match(/^\/vibe-lock\/([^/]+)\/(.+)$/);
   if (req.method === "GET" && vibeLockMatch) {
     const [, projectId, fileId] = vibeLockMatch;
+    const access = await requireDocAccessOrReply(req, res, projectId);
+    if (!access) return;
     const decodedFileId = decodeURIComponent(fileId);
     const roomName = `${projectId}-${decodedFileId}`;
     const docData = docs.get(roomName);
@@ -653,7 +723,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   // -- GET /rooms ------------------------------------------------------------
+  // Spans every project, so a per-project role check cannot apply. Internal
+  // callers only.
   if (req.method === "GET" && url === "/rooms") {
+    if (!requireInternalSecretOrReply(req, res)) return;
     sendJson(res, 200, {
       rooms: Array.from(docs.entries()).map(([name, d]) => ({
         name,
