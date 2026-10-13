@@ -15,6 +15,7 @@
 
 import { create } from "zustand";
 import * as Y from "yjs";
+import { apiPath } from "@/lib/api-path";
 import type { EditBlock, RelativePositionJSON } from "@/src/server/edit-position-tracker";
 
 export interface PendingEdit {
@@ -206,7 +207,7 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
         });
       }
 
-      const res = await fetch("/api/edits/apply", {
+      const res = await fetch(apiPath("/api/edits/apply"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

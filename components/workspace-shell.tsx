@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/use-session";
+import { apiPath } from "@/lib/api-path";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
@@ -183,7 +184,7 @@ function SignInPane() {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/me", {
+      const res = await fetch(apiPath("/api/auth/me"), {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
       if (!res.ok) {

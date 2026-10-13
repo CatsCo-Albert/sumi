@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiPath } from "./api-path";
 
 export interface SessionActor {
   kind: "user" | "agent";
@@ -38,7 +39,7 @@ export function useSession(): {
     // No early return when the token is absent: behind the artifact gateway the
     // browser holds a viewer cookie instead, which is sent automatically. The
     // request decides who this is, not the presence of a stored token.
-    fetch("/api/auth/me", {
+    fetch(apiPath("/api/auth/me"), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(async (res) => {
