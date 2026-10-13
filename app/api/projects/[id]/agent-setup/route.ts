@@ -118,6 +118,8 @@ export async function GET(
     `  对其他人更友好，且 merge 冲突少`,
     `- 修改完成后调用 conn.close() 释放连接`,
     `- 需要写新文件？POST /api/projects/${projectId}/documents { fileId, title }`,
+    `- 直接改文件不走 Yjs？PUT /api/documents/content —— 带 baseContentHash 做乐观锁，`,
+    `  409 FILE_CONFLICT 时先重新 GET 再决定覆盖`,
   ].join("\n");
 
   return Response.json({

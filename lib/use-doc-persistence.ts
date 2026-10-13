@@ -7,7 +7,10 @@
  * `/api/documents/content` every AUTOSAVE_DEBOUNCE_MS of user-idle so
  * a fresh client can seed without replaying Redis updates.
  *
- * Also fetches the canonical content on mount for `initialContent`.
+ * Concurrency: PUT carries `baseContentHash`. On 409 FILE_CONFLICT we
+ * re-GET the canonical hash once and retry with `force` — the Yjs doc is
+ * authoritative for us, so overwriting is correct (remote collaborators
+ * see the change via /replace anyway).
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -24,14 +27,10 @@ export interface PersistenceState {
   error: string | null;
   /** Timestamp of last successful save. */
   lastSavedAt: number | null;
+  /** Set when a save hit a conflict twice (should be rare). */
+  conflicted: boolean;
 }
 
-/**
- * Watch a Y.Text-ish content source and debounce-save it via PUT.
- *
- * `onContentChange` is expected to be called from the editor on every
- * keystroke; we debounce here.
- */
 export function useDocPersistence(
   projectId: string | null,
   fileId: string | null
@@ -43,10 +42,12 @@ export function useDocPersistence(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [conflicted, setConflicted] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContent = useRef<string | null>(null);
+  const contentHash = useRef<string | null>(null);
 
-  // Load canonical content once
+  // Load canonical content + hash once
   useEffect(() => {
     if (!projectId || !fileId) {
       setInitialContent("");
@@ -59,6 +60,7 @@ export function useDocPersistence(
       .then((r) => (r.ok ? r.json() : { content: "", exists: false }))
       .then((d) => {
         setInitialContent(d.exists ? d.content : "");
+        contentHash.current = d.contentHash ?? null;
         setLoading(false);
       })
       .catch(() => {
@@ -71,15 +73,53 @@ export function useDocPersistence(
     if (!projectId || !fileId || pendingContent.current === null) return;
     const content = pendingContent.current;
     pendingContent.current = null;
-    try {
+
+    const attempt = async (body: Record<string, unknown>) => {
       const res = await fetch(SAVE_ENDPOINT, {
         method: "PUT",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, filePath: fileId, content }),
+        body: JSON.stringify(body),
       });
+      return res;
+    };
+
+    try {
+      let res = await attempt({
+        projectId,
+        filePath: fileId,
+        content,
+        baseContentHash: contentHash.current ?? undefined,
+      });
+
+      if (res.status === 409) {
+        // Someone else saved in between — re-read the current hash and
+        // overwrite once. Yjs is authoritative locally; the conflict is
+        // only about which canonical blob to store.
+        const fresh = await fetch(
+          `${SAVE_ENDPOINT}?projectId=${encodeURIComponent(projectId)}&filePath=${encodeURIComponent(fileId)}`,
+          { headers: getAuthHeaders() }
+        );
+        if (fresh.ok) {
+          const d = await fresh.json();
+          contentHash.current = d.contentHash ?? null;
+          res = await attempt({
+            projectId,
+            filePath: fileId,
+            content,
+            baseContentHash: contentHash.current ?? undefined,
+          });
+        }
+      }
+
       if (res.ok) {
+        const d = await res.json().catch(() => ({}));
+        contentHash.current = d.contentHash ?? contentHash.current;
         setLastSavedAt(Date.now());
         setError(null);
+        setConflicted(false);
+      } else if (res.status === 409) {
+        setConflicted(true);
+        setError("内容冲突 — 稍后重试");
       } else {
         setError(`save failed: ${res.status}`);
       }
@@ -113,5 +153,5 @@ export function useDocPersistence(
     };
   }, [flush]);
 
-  return { initialContent, loading, error, lastSavedAt, scheduleSave };
+  return { initialContent, loading, error, lastSavedAt, conflicted, scheduleSave };
 }

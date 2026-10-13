@@ -100,8 +100,9 @@ POST /api/projects/:id/documents { fileId, title }
 GET  /api/projects/:id/documents
 DELETE /api/projects/:id/documents { fileId }
 GET  /api/projects/:id/agent-setup?subjectId=a42&fileId=… → copy-paste agent onboarding
-GET  /api/documents/content?projectId&filePath
-PUT  /api/documents/content  { projectId, filePath, content }
+GET  /api/documents/content?projectId&filePath          → { content, contentHash }
+PUT  /api/documents/content  { projectId, filePath, content, baseContentHash? }
+     → 200 { contentHash }  |  409 { errorCode: "FILE_CONFLICT", currentHash }
 POST /api/edits/apply          { projectId, filePath, blocks }
 POST /api/ui/publish           { userId, projectId, patch }
 GET  /api/ui/events                                  → SSE
@@ -135,6 +136,7 @@ Working:
 - Project/doc delete — cascades via `ON DELETE CASCADE`
 - Doc rename — `PATCH /api/projects/:id/documents` updates `fileId`/`title` and moves the storage file
 - Editor — CodeMirror + yCollab + awareness carets; autosaves canonical markdown to `/api/documents/content` (2s debounce)
+- Optimistic concurrency — `baseContentHash` guards the canonical blob; 409 → client re-GETs hash and retries once
 - Agent onboarding — `GET /api/projects/:id/agent-setup` returns copy-pasteable instructions (`connectSumi()` + Y.Text edit API + env vars); UI exposes it from the member panel
 
 Stubbed / missing:

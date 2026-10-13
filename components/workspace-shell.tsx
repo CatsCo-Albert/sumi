@@ -118,7 +118,7 @@ function EditorPane({
 }) {
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
-  const { initialContent, loading, scheduleSave, lastSavedAt, error } =
+  const { initialContent, loading, scheduleSave, lastSavedAt, error, conflicted } =
     useDocPersistence(projectId, fileId);
 
   return (
@@ -135,7 +135,9 @@ function EditorPane({
         </div>
         {/* Save indicator */}
         <div className="text-[10px] text-muted-foreground/60">
-          {error ? (
+          {conflicted ? (
+            <span className="text-amber-500">冲突 — 已回退重试</span>
+          ) : error ? (
             <span className="text-destructive">{error}</span>
           ) : lastSavedAt ? (
             `已保存 ${new Date(lastSavedAt).toLocaleTimeString()}`
