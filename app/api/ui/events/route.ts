@@ -4,8 +4,9 @@
  * Adapted from the SSE event route; the transport
  * is ReadableStream over Response so it works under Next.js App Router.
  *
- * Auth is currently open (single-user dev mode); wire getUserId() to your
- * session provider when auth lands.
+ * Auth: requires a resolvable CatsCo actor; unauthenticated callers get 401.
+ * Events are scoped to that actor, so one principal cannot read another's
+ * patch stream.
  */
 
 import { listUiEvents, subscribeUiEvents } from "@/src/ui-bus/event-bus";

@@ -40,9 +40,12 @@ const getMetaKey = (p: string, f: string) => `${getKeyPrefix(p, f)}:meta`;
 /**
  * Parse "projectId-fileId" → { projectId, fileId }.
  *
- * Room name format: `{projectId}-{fileId}` where projectId is a UUID or cuid
- * and fileId may contain hyphens. Returns null for reserved room prefixes
- * (chat-*, project-*).
+ * Room name format: `{projectId}-{fileId}`. The project id is matched by the
+ * shapes this codebase actually mints — UUID, cuid, or the `prj_…` prefix from
+ * `src/auth/identity.ts` — so the separator is unambiguous even when the file id
+ * contains hyphens. A hyphen-free fallback covers hand-made room names.
+ *
+ * Returns null for reserved room prefixes (chat-*, project-*).
  */
 export function parseRoomName(
   roomName: string
@@ -53,11 +56,17 @@ export function parseRoomName(
     return null;
   }
 
+  // Longest-prefix-first: each alternative is anchored and ends at a hyphen that
+  // is followed by the file id, so a greedy match cannot eat into it.
   const projectIdPattern =
-    /^((?:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})|(?:c[a-z0-9]{24})|(?:[a-zA-Z0-9_-]+))-(.+)$/i;
+    /^((?:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})|(?:c[a-z0-9]{24})|(?:prj_[A-Za-z0-9]+))-(.+)$/i;
   const m = cleanName.match(projectIdPattern);
-  if (!m) return null;
-  return { projectId: m[1], fileId: m[2] };
+  if (m) return { projectId: m[1], fileId: m[2] };
+
+  // Fallback: an id with no hyphens, e.g. "myproject-notes.md".
+  const fallback = cleanName.match(/^([a-zA-Z0-9_]+)-(.+)$/);
+  if (!fallback) return null;
+  return { projectId: fallback[1], fileId: fallback[2] };
 }
 
 // ---------------------------------------------------------------------------
