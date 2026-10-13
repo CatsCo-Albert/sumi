@@ -13,7 +13,7 @@ import { getDb } from "@/src/db";
 import { projectRoleFor } from "@/src/auth/actor";
 import { getStorage } from "@/src/storage";
 
-const WS_PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 1234;
+const WS_PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 12345;
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || "";
 
 const docKey = (projectId: string, filePath: string) =>

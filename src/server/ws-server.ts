@@ -19,7 +19,7 @@
  *   pnpm dev               # tsx watch
  *
  * Env:
- *   WS_PORT                  (default 1234)
+ *   WS_PORT                  (default 12345)
  *   REDIS_URL                optional — enables persistence
  *   INTERNAL_API_SECRET      required for /clear, /replace, /admin/* and agent tokens
  *   WS_AGENT_TOKEN_SECRET    overrides INTERNAL_API_SECRET for agent-token signing
@@ -53,7 +53,7 @@ import {
 // Config
 // ---------------------------------------------------------------------------
 
-const PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 1234;
+const PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 12345;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const EMPTY_DOC_CLEANUP_DELAY_MS = 5 * 60_000;
 const INIT_ORPHAN_CLEANUP_DELAY_MS = 30_000;

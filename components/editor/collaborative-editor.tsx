@@ -82,7 +82,7 @@ export interface CollaborativeEditorProps {
   restoreToken?: number;
   onContentChange?: (content: string) => void;
   onCollaboratorsChange?: (collaborators: CollaboratorInfo[]) => void;
-  /** e.g. "ws://localhost:1234" — room name is derived internally. */
+  /** e.g. "ws://localhost:12345" — room name is derived internally. */
   wsUrl?: string;
   mode?: EditorMode;
   /** Prefill local Yjs with initialContent before sync — avoids a flash of empty. */
@@ -144,8 +144,9 @@ export default function CollaborativeEditor({
   const effectiveWsUrl =
     wsUrl ||
     (typeof window !== "undefined"
-      ? `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.hostname}:1234`
-      : "ws://localhost:1234");
+      ? process.env.NEXT_PUBLIC_SUMI_WS_URL ||
+        `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.hostname}:12345`
+      : "ws://localhost:12345");
 
   // --- Restore token: wipe and re-seed --------------------------------------
   useEffect(() => {

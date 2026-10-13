@@ -18,6 +18,7 @@ import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
 import DocumentListPane from "@/components/document-list-pane";
+import { useDocPersistence } from "@/lib/use-doc-persistence";
 
 export default function WorkspaceShell() {
   const searchParams = useSearchParams();
@@ -117,6 +118,8 @@ function EditorPane({
 }) {
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
+  const { initialContent, loading, scheduleSave, lastSavedAt, error } =
+    useDocPersistence(projectId, fileId);
 
   return (
     <div
@@ -129,6 +132,14 @@ function EditorPane({
       <header className="flex h-11 items-center gap-3 border-b border-border/60 px-4">
         <div className="text-[13px] font-medium text-muted-foreground">
           {fileId.split("/").pop() || fileId}
+        </div>
+        {/* Save indicator */}
+        <div className="text-[10px] text-muted-foreground/60">
+          {error ? (
+            <span className="text-destructive">{error}</span>
+          ) : lastSavedAt ? (
+            `已保存 ${new Date(lastSavedAt).toLocaleTimeString()}`
+          ) : null}
         </div>
         {/* Live collaborators — colored dots + tooltip name */}
         <div className="ml-auto flex items-center gap-2">
@@ -152,14 +163,21 @@ function EditorPane({
         </div>
       </header>
       <div className="flex-1 overflow-hidden">
-        <CollaborativeEditor
-          projectId={projectId}
-          fileId={fileId}
-          mode="markdown"
-          userId={actor.id}
-          userName={actor.name}
-          onCollaboratorsChange={setCollaborators}
-        />
+        {loading ? (
+          <LoadingPane />
+        ) : (
+          <CollaborativeEditor
+            projectId={projectId}
+            fileId={fileId}
+            mode="markdown"
+            userId={actor.id}
+            userName={actor.name}
+            initialContent={initialContent ?? ""}
+            prefillOnConnect
+            onContentChange={scheduleSave}
+            onCollaboratorsChange={setCollaborators}
+          />
+        )}
       </div>
     </div>
   );

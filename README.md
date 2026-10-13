@@ -62,7 +62,7 @@ OC_JWT_SECRET=…             # shared with cats-company
 CATSCO_BASE_URL=…
 CATSCO_SERVICE_TOKEN=…      # scope: account.introspect
 INTERNAL_API_SECRET=…       # /admin, /replace, /clear, /ui/publish
-WS_PORT=1234
+WS_PORT=12345
 ```
 
 ## Connect an agent
@@ -91,11 +91,15 @@ Raw URL form: `wss://sumi.example.com/prj_xxx-notes%2Fintro.md?api_key=cc_…`
 GET  /api/auth/me
 POST /api/projects              { name }
 GET  /api/projects
+GET  /api/projects/:id
+DELETE /api/projects/:id                                  (owner only, cascades)
 POST /api/projects/:id/members  { subjectId, role }
 DELETE /api/projects/:id/members { subjectId }
 GET  /api/projects/:id/members
 POST /api/projects/:id/documents { fileId, title }
 GET  /api/projects/:id/documents
+DELETE /api/projects/:id/documents { fileId }
+GET  /api/projects/:id/agent-setup?subjectId=a42&fileId=… → copy-paste agent onboarding
 GET  /api/documents/content?projectId&filePath
 PUT  /api/documents/content  { projectId, filePath, content }
 POST /api/edits/apply          { projectId, filePath, blocks }
@@ -128,6 +132,10 @@ Working:
 - A2UI bridge — agents patch workspace UI via `POST /api/ui/publish` → SSE
 - Project/doc browser — `/` lists projects, creates docs
 - Members — owner adds `u{uid}`/`a{uid}` with `viewer|editor` role
+- Project/doc delete — cascades via `ON DELETE CASCADE`
+- Doc rename — `PATCH /api/projects/:id/documents` updates `fileId`/`title` and moves the storage file
+- Editor — CodeMirror + yCollab + awareness carets; autosaves canonical markdown to `/api/documents/content` (2s debounce)
+- Agent onboarding — `GET /api/projects/:id/agent-setup` returns copy-pasteable instructions (`connectSumi()` + Y.Text edit API + env vars); UI exposes it from the member panel
 
 Stubbed / missing:
 - Agent invocation from the Omni dock — `src/agent-client.ts` is a CLI scaffold; needs a real LLM pipeline
