@@ -18,8 +18,11 @@ import {
   getPendingEdit,
   updatePendingEditStatus,
   deletePendingEdit,
+  saveDocSnapshot,
 } from "@/src/pending-edits";
 import { publishUiPatch } from "@/src/ui-bus/event-bus";
+import { getStorage } from "@/src/storage";
+import crypto from "crypto";
 import type { EditBlock } from "@/src/server/edit-position-tracker";
 
 // ---------------------------------------------------------------------------
@@ -153,6 +156,21 @@ export async function POST(request: Request) {
     }
   } catch {
     // relpos enrichment is optional — fall back to raw line numbers
+  }
+
+  // Capture a doc snapshot so the apply path can verify anchors later.
+  // Best-effort — a missing snapshot just means less rigorous drift checks.
+  try {
+    const storage = await getStorage();
+    const key = `sumi/${projectId}/files/${fileId}`;
+    if (await storage.exists(key)) {
+      const buf = await storage.download(key);
+      const content = buf.toString("utf8");
+      const contentHash = crypto.createHash("sha256").update(buf).digest("hex");
+      saveDocSnapshot(db, { projectId, fileId, content, contentHash });
+    }
+  } catch {
+    // snapshot failure is non-fatal
   }
 
   const created = addPendingEdit(db, {

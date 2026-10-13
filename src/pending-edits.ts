@@ -195,3 +195,37 @@ export function listMemberSubjects(
     .all(projectId) as Array<{ subjectId: string }>;
   return rows.map((r) => r.subjectId);
 }
+
+// ---------------------------------------------------------------------------
+// Doc snapshots — captured at propose-time so apply can do 3-way sanity checks
+// ---------------------------------------------------------------------------
+
+export function saveDocSnapshot(
+  db: DatabaseSync,
+  input: { projectId: string; fileId: string; content: string; contentHash: string }
+): void {
+  db.prepare(
+    `INSERT INTO doc_snapshots (project_id, file_id, content, content_hash, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (project_id, file_id) DO UPDATE SET
+       content = excluded.content,
+       content_hash = excluded.content_hash,
+       created_at = excluded.created_at`
+  ).run(input.projectId, input.fileId, input.content, input.contentHash, Date.now());
+}
+
+export function getDocSnapshot(
+  db: DatabaseSync,
+  projectId: string,
+  fileId: string
+): { content: string; contentHash: string; createdAt: number } | null {
+  const r = db
+    .prepare(
+      `SELECT content, content_hash AS contentHash, created_at AS createdAt
+       FROM doc_snapshots WHERE project_id = ? AND file_id = ?`
+    )
+    .get(projectId, fileId) as
+    | { content: string; contentHash: string; createdAt: number }
+    | undefined;
+  return r ?? null;
+}

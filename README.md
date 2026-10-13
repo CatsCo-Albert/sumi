@@ -107,6 +107,10 @@ POST /api/edits/apply          { projectId, filePath, blocks, editId? }
 POST /api/pending-edits        { projectId, fileId, blocks, targetUserId?, description? }
 GET  /api/pending-edits?projectId&fileId                  → reviewer's pending queue
 DELETE /api/pending-edits      { editId }                                       (reviewer only)
+PATCH /api/projects/:id/members { subjectId, status }     — disable/enable an agent
+POST /api/projects/:id/assets                            — binary upload (multipart or raw)
+GET  /api/projects/:id/assets?key=…                      — fetch asset (immutable cache)
+DELETE /api/projects/:id/assets {key}
 POST /api/ui/publish           { userId, projectId, patch }
 GET  /api/ui/events                                  → SSE
 ```
@@ -143,7 +147,9 @@ Working:
 - Preview — source / split / rendered markdown toggle in the editor chrome
 - Selection → AI — `⌘K` on a selection pushes it into the omni dock as a queued prompt
 - Optimistic concurrency — `baseContentHash` guards the canonical blob; 409 → client re-GETs hash and retries once
-- Pending edits — agents `POST /api/pending-edits` with line-number blocks; each row is broadcast via SSE (`pending_edit_changed`), lands in `useEditStore`, renders as inline diff decorations with 保留/撤销 buttons. Accept → `POST /api/edits/apply` pushes into Yjs + marks row applied. Reject → DELETE marks row rejected.
+- Pending edits — agents `POST /api/pending-edits` with line-number blocks; each row is broadcast via SSE (`pending_edit_changed`), lands in `useEditStore`, renders as inline diff decorations with 保留/撤销 buttons. Accept → `POST /api/edits/apply` pushes into Yjs + marks row applied. Reject → DELETE marks row rejected. Doc snapshot is captured at propose-time so RelPos anchors survive drift.
+- Agent lifecycle — owner can `PATCH members {status: disabled}` to quarantine an `a*` subject; WS auth rejects them until re-enabled.
+- Assets — `POST /api/projects/:id/assets` uploads binary (10MB cap); GET serves immutable content-hash'd URL.
 - Agent onboarding — `GET /api/projects/:id/agent-setup` returns copy-pasteable instructions (`connectSumi()` + Y.Text edit API + env vars); UI exposes it from the member panel
 
 Stubbed / missing:

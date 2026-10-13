@@ -87,6 +87,30 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         ON pending_edits(project_id, file_id, user_id, status);
     `,
   },
+  {
+    version: 3,
+    sql: `
+      -- Snapshot of the canonical document at propose-time.
+      -- Used by the apply path to verify RelPos still resolves correctly
+      -- (3-way merge baseline). One row per (projectId, fileId) — latest wins.
+      CREATE TABLE IF NOT EXISTS doc_snapshots (
+        project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        file_id      TEXT NOT NULL,
+        content      TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at   INTEGER NOT NULL,
+        PRIMARY KEY (project_id, file_id)
+      );
+    `,
+  },
+  {
+    version: 4,
+    sql: `
+      -- Agent lifecycle state: "active" (can auth), "disabled" (rejected).
+      -- NULL/missing → active. Only meaningful for a* subjects.
+      ALTER TABLE subjects ADD COLUMN status TEXT CHECK (status IN ('active','disabled'));
+    `,
+  },
 ];
 
 export async function getDb(): Promise<DatabaseSync> {

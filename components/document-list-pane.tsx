@@ -28,6 +28,7 @@ interface Member {
   role: string;
   displayName: string | null;
   kind: string | null;
+  status?: string | null;  // 'active' | 'disabled' | null
 }
 interface AgentSetup {
   subjectId: string;
@@ -255,6 +256,23 @@ export default function DocumentListPane() {
     }
   };
 
+  const toggleAgentStatus = async (subjectId: string, currentStatus: string | null) => {
+    if (!selected) return;
+    const next = currentStatus === "disabled" ? "active" : "disabled";
+    const res = await fetch(`/api/projects/${selected.id}/members`, {
+      method: "PATCH",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ subjectId, status: next }),
+    });
+    if (res.ok) {
+      setMembers((m) =>
+        m.map((x) =>
+          x.subjectId === subjectId ? { ...x, status: next } : x
+        )
+      );
+    }
+  };
+
   const toggleAgentSetup = async (subjectId: string, fileId?: string) => {
     if (!selected) return;
     if (agentSetupFor === subjectId && fileId === undefined) {
@@ -434,14 +452,17 @@ export default function DocumentListPane() {
                 <ul className="mb-3 divide-y divide-border/40">
                   {members.map((m) => {
                     const isAgent = m.subjectId.startsWith("a") || m.kind === "agent";
+                    const isDisabled = m.status === "disabled";
                     const setupOpen = agentSetupFor === m.subjectId;
                     return (
-                      <li key={m.subjectId} className="py-2">
+                      <li key={m.subjectId} className={cn("py-2", isDisabled && "opacity-50")}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className={cn(
                               "inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white",
-                              isAgent ? "bg-violet-500" : "bg-primary"
+                              isDisabled
+                                ? "bg-muted-foreground/40"
+                                : isAgent ? "bg-violet-500" : "bg-primary"
                             )}>
                               {(m.displayName || m.subjectId).slice(0, 1).toUpperCase()}
                             </span>
@@ -453,6 +474,11 @@ export default function DocumentListPane() {
                                     agent
                                   </span>
                                 )}
+                                {isDisabled && (
+                                  <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+                                    已禁用
+                                  </span>
+                                )}
                               </div>
                               <div className="font-mono text-[10px] text-muted-foreground">
                                 {m.subjectId} · {m.role}
@@ -461,17 +487,27 @@ export default function DocumentListPane() {
                           </div>
                           <div className="flex items-center gap-3">
                             {isAgent && (
-                              <button
-                                onClick={() => toggleAgentSetup(m.subjectId)}
-                                className={cn(
-                                  "text-[11px]",
-                                  setupOpen
-                                    ? "text-foreground"
-                                    : "text-muted-foreground hover:text-foreground"
+                              <>
+                                <button
+                                  onClick={() => toggleAgentSetup(m.subjectId)}
+                                  className={cn(
+                                    "text-[11px]",
+                                    setupOpen
+                                      ? "text-foreground"
+                                      : "text-muted-foreground hover:text-foreground"
+                                  )}
+                                >
+                                  {setupOpen ? "收起接入指南" : "接入指南"}
+                                </button>
+                                {isOwner && (
+                                  <button
+                                    onClick={() => toggleAgentStatus(m.subjectId, m.status ?? null)}
+                                    className="text-[11px] text-muted-foreground hover:text-amber-600"
+                                  >
+                                    {isDisabled ? "启用" : "禁用"}
+                                  </button>
                                 )}
-                              >
-                                {setupOpen ? "收起接入指南" : "接入指南"}
-                              </button>
+                              </>
                             )}
                             {m.role !== "owner" && (
                               <button

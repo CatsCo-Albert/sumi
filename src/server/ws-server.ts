@@ -41,7 +41,7 @@ import {
   clearPersistence,
   closeAllPersistence,
 } from "./yjs-persistence";
-import { createRelPosForEdit } from "./edit-position-tracker";
+import { createRelPosForEdit, getLineFromRelPos } from "./edit-position-tracker";
 import { getDb } from "../db";
 import {
   resolveActor,
@@ -401,7 +401,13 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     try {
       const { blocks } = JSON.parse(body) as {
-        blocks?: Array<{ startLine: number; endLine: number; updated: string }>;
+        blocks?: Array<{
+          startLine: number;
+          endLine: number;
+          updated: string;
+          startRelPos?: object;
+          endRelPos?: object;
+        }>;
       };
       const docData = await resolveDocData(roomName);
       if (!docData) {
@@ -414,8 +420,20 @@ const server = http.createServer(async (req, res) => {
       const ytext = docData.doc.getText("content");
 
       if (blocks && Array.isArray(blocks)) {
+        // Re-resolve RelPos anchors to current line numbers when available.
+        // Falling back to raw line numbers when the block carries no anchors.
+        const resolved = blocks.map((b) => {
+          if (b.startRelPos && b.endRelPos) {
+            const s = getLineFromRelPos(docData.doc, ytext, b.startRelPos);
+            const e = getLineFromRelPos(docData.doc, ytext, b.endRelPos);
+            if (s && e && s <= e) {
+              return { ...b, startLine: s, endLine: e };
+            }
+          }
+          return b;
+        });
         // Apply bottom-up so earlier offsets stay valid.
-        const sorted = [...blocks].sort((a, b) => b.startLine - a.startLine);
+        const sorted = [...resolved].sort((a, b) => b.startLine - a.startLine);
         docData.doc.transact(() => {
           for (const block of sorted) {
             const content = ytext.toString();

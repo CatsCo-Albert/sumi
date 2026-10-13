@@ -109,6 +109,16 @@ export async function resolveActor(
   const u = introspect.user;
   const isAgent = u.account_type !== 0; // non-human accounts act as agents
   const subjectId = actorKey(isAgent ? "agent" : "user", u.uid);
+
+  // Check local disable flag — project owners can quarantine an agent without
+  // touching CatsCo. Disabled agents are rejected here.
+  if (isAgent) {
+    const row = db
+      .prepare("SELECT status FROM subjects WHERE subject_id = ?")
+      .get(subjectId) as { status: string | null } | undefined;
+    if (row?.status === "disabled") return null;
+  }
+
   upsertSubjectSafe(db, {
     subjectId,
     kind: isAgent ? "agent" : "user",

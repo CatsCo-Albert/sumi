@@ -63,6 +63,8 @@ export async function GET(
   const wsBaseUrl =
     process.env.NEXT_PUBLIC_SUMI_WS_URL ||
     `ws://localhost:${process.env.WS_PORT || 12345}`;
+  const httpBaseUrl =
+    process.env.NEXT_PUBLIC_SUMI_HTTP_URL || "http://localhost:3000";
 
   const roomName = `${projectId}-${fileId}`;
   const wsUrl = `${wsBaseUrl}/${roomName}?api_key=cc_...`;
@@ -127,6 +129,16 @@ export async function GET(
     `    description: "这段改动意图…"`,
     `  }`,
     `  —— 修改会以「待审核」状态出现在用户编辑器里，让他们点「保留/撤销」`,
+    ``,
+    `上传图片等二进制资源：`,
+    ``,
+    `  curl -X POST "${httpBaseUrl}/api/projects/${projectId}/assets" \\`,
+    `    -H "Authorization: ApiKey $CATSCO_API_KEY" \\`,
+    `    -H "x-file-name: diagram.png" \\`,
+    `    --data-binary @./diagram.png`,
+    ``,
+    `  → { url } —— 可以直接插入到 markdown：`,
+    `    ![diagram](${httpBaseUrl}/api/projects/${projectId}/assets?key=...)`,
   ].join("\n");
 
   return Response.json({
