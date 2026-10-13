@@ -1,9 +1,23 @@
 "use client";
 
 /**
- * Project + document browser — the welcome surface when no doc is open.
- * Apple-grade: clean list, hairlines, no chrome.
+ * Open a document with a full navigation rather than the client router.
+ *
+ * Two gateway behaviours make client-side navigation unusable here, and both
+ * were observed live:
+ *   - `router.push("/?doc=…")` under basePath produces `/sumi?doc=…` (no
+ *     trailing slash). The deployment's CSP allows `…/sumi/`, so Next's RSC
+ *     fetch for that URL is refused and the router falls back to a page load.
+ *   - The same slashless URL is also redirected by the gateway to `/sumi/`,
+ *     which drops the query string — so the document never arrives and the
+ *     workspace re-renders the list.
+ *
+ * Navigating to the explicitly slashed path avoids both: the query survives,
+ * and the server sends the editor back.
  */
+function openDocument(id: string): void {
+  window.location.assign(apiPath(`/?doc=${encodeURIComponent(id)}`));
+}
 
 import { useEffect, useState } from "react";
 import { apiPath } from "@/lib/api-path";
@@ -167,7 +181,7 @@ export default function DocumentListPane() {
     setNewFileId("");
     setNewTitle("");
     setShowNewDoc(false);
-    router.push(`/?doc=${document.id}`);
+    openDocument(document.id);
   };
 
   const deleteDocument = async (doc: Document) => {
@@ -309,7 +323,7 @@ export default function DocumentListPane() {
   };
 
   const openDoc = (doc: Document) => {
-    router.push(`/?doc=${doc.id}`);
+    openDocument(doc.id);
   };
 
   return (
