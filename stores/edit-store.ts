@@ -44,14 +44,33 @@ export interface EditLock {
   userColor: string;
 }
 
+export type NavigateToFileCallback = (
+  filePath: string,
+  line?: number
+) => void;
+export type ApplyEditCallback = (
+  filePath: string,
+  blocks: EditBlock[]
+) => boolean;
+
 interface EditStoreState {
   pendingEdits: PendingEdit[];
+  /** Cursor-style command-bar navigation state. */
+  currentEditIndex: number;
+  isCommandBarVisible: boolean;
+
   currentYDoc: Y.Doc | null;
   currentYText: Y.Text | null;
   currentFileId: string | null;
   currentUserId: string | null;
   currentUserName: string | null;
   currentUserColor: string | null;
+
+  /** Callbacks wired by the shell / editor. */
+  navigateToFileCallback: NavigateToFileCallback | null;
+  applyCallback: ApplyEditCallback | null;
+  /** Line the editor should scroll to once its doc is synced. */
+  pendingScrollLine: number | null;
 
   /** Called by the editor to share Yjs refs + identity. */
   setYjsRefs: (ydoc: Y.Doc | null, ytext: Y.Text | null, fileId: string | null) => void;
@@ -70,10 +89,28 @@ interface EditStoreState {
   setSyncLocksCallback: (cb: ((locks: EditLock[]) => void) | null) => void;
   getPendingLocks: () => EditLock[];
 
+  setNavigateToFileCallback: (cb: NavigateToFileCallback | null) => void;
+  setApplyCallback: (cb: ApplyEditCallback | null) => void;
+  /** Consume the queued scroll target (returns it once). */
+  consumePendingScrollLine: () => number | null;
+
+  /** Re-resolve block line numbers against live Yjs state (display). */
+  updateLineNumbersFromRelPos: () => void;
+  /** Jump to the file+line of the current edit. */
+  navigateToCurrentEdit: () => void;
+
   /** Apply an edit through the internal API. */
   applyEdit: (editId: string) => Promise<void>;
   /** Reject = drop the pending edit without touching the doc. */
   rejectEdit: (editId: string) => void;
+  applyAll: () => Promise<void>;
+  rejectAll: () => void;
+
+  setCurrentEditIndex: (index: number) => void;
+  nextEdit: () => void;
+  prevEdit: () => void;
+  getCurrentEdit: () => PendingEdit | null;
+  getPendingCount: () => number;
 }
 
 /** Resolve a RelPos to a 1-based line number. */
@@ -117,6 +154,8 @@ function filePathMatches(a: string, b: string): boolean {
 
 export const useEditStore = create<EditStoreState>((set, get) => ({
   pendingEdits: [],
+  currentEditIndex: 0,
+  isCommandBarVisible: false,
   currentYDoc: null,
   currentYText: null,
   currentFileId: null,
@@ -124,6 +163,9 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
   currentUserName: null,
   currentUserColor: null,
   syncLocksCallback: null,
+  navigateToFileCallback: null,
+  applyCallback: null,
+  pendingScrollLine: null,
 
   setYjsRefs: (ydoc, ytext, fileId) =>
     set({ currentYDoc: ydoc, currentYText: ytext, currentFileId: fileId }),
@@ -131,21 +173,46 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
   setCurrentUserInfo: (userId, name, color) =>
     set({ currentUserId: userId, currentUserName: name, currentUserColor: color }),
 
-  setPendingEdits: (edits) => set({ pendingEdits: edits }),
+  setPendingEdits: (edits) =>
+    set((state) => ({
+      pendingEdits: edits,
+      currentEditIndex: Math.min(
+        state.currentEditIndex,
+        Math.max(0, edits.length - 1)
+      ),
+      isCommandBarVisible:
+        state.isCommandBarVisible || edits.some((e) => e.status === "pending"),
+    })),
 
   upsertPendingEdit: (edit) =>
     set((state) => {
       const idx = state.pendingEdits.findIndex((e) => e.id === edit.id);
-      if (idx === -1) return { pendingEdits: [...state.pendingEdits, edit] };
-      const next = [...state.pendingEdits];
-      next[idx] = edit;
-      return { pendingEdits: next };
+      const pendingEdits =
+        idx === -1
+          ? [...state.pendingEdits, edit]
+          : state.pendingEdits.map((e, i) => (i === idx ? edit : e));
+      return {
+        pendingEdits,
+        isCommandBarVisible:
+          state.isCommandBarVisible ||
+          pendingEdits.some((e) => e.status === "pending"),
+      };
     }),
 
   removePendingEdit: (editId) =>
-    set((state) => ({
-      pendingEdits: state.pendingEdits.filter((e) => e.id !== editId),
-    })),
+    set((state) => {
+      const pendingEdits = state.pendingEdits.filter((e) => e.id !== editId);
+      return {
+        pendingEdits,
+        currentEditIndex: Math.min(
+          state.currentEditIndex,
+          Math.max(0, pendingEdits.length - 1)
+        ),
+        isCommandBarVisible:
+          state.isCommandBarVisible &&
+          pendingEdits.some((e) => e.status === "pending"),
+      };
+    }),
 
   getEditLocks: (fileId, userId) => {
     const { pendingEdits, currentUserName, currentUserColor, currentYDoc, currentYText } = get();
@@ -174,6 +241,50 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
   },
 
   setSyncLocksCallback: (cb) => set({ syncLocksCallback: cb }),
+
+  setNavigateToFileCallback: (cb) => set({ navigateToFileCallback: cb }),
+  setApplyCallback: (cb) => set({ applyCallback: cb }),
+  consumePendingScrollLine: () => {
+    const line = get().pendingScrollLine;
+    if (line !== null) set({ pendingScrollLine: null });
+    return line;
+  },
+
+  updateLineNumbersFromRelPos: () => {
+    const { pendingEdits, currentYDoc, currentYText, currentFileId } = get();
+    if (!currentYDoc || !currentYText || !currentFileId) return;
+
+    let hasChanges = false;
+    const updatedEdits = pendingEdits.map((edit) => {
+      if (edit.status !== "pending") return edit;
+      if (!filePathMatches(edit.filePath, currentFileId)) return edit;
+      const updatedBlocks = edit.blocks.map((block) => {
+        if (!block.startRelPos || !block.endRelPos) return block;
+        const { startLine, endLine } = getEffectiveLineNumbers(
+          block,
+          currentYDoc,
+          currentYText
+        );
+        if (startLine !== block.startLine || endLine !== block.endLine) {
+          hasChanges = true;
+          return { ...block, startLine, endLine };
+        }
+        return block;
+      });
+      return { ...edit, blocks: updatedBlocks };
+    });
+
+    if (hasChanges) set({ pendingEdits: updatedEdits });
+  },
+
+  navigateToCurrentEdit: () => {
+    const { pendingEdits, currentEditIndex, navigateToFileCallback } = get();
+    const currentEdit = pendingEdits[currentEditIndex];
+    if (!currentEdit) return;
+    const block = currentEdit.blocks[0];
+    if (block?.startLine) set({ pendingScrollLine: block.startLine });
+    navigateToFileCallback?.(currentEdit.filePath, block?.startLine);
+  },
 
   getPendingLocks: () => {
     const { pendingEdits, currentFileId, currentUserId } = get();
@@ -240,6 +351,13 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ editId }),
       }).catch(() => undefined);
+
+      get().nextEdit();
+      if (
+        !get().pendingEdits.some((e) => e.status === "pending")
+      ) {
+        set({ isCommandBarVisible: false });
+      }
     } catch {
       set((state) => ({
         pendingEdits: state.pendingEdits.map((e) =>
@@ -261,5 +379,88 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ editId }),
     }).catch(() => undefined);
+
+    get().nextEdit();
+    if (!get().pendingEdits.some((e) => e.status === "pending")) {
+      set({ isCommandBarVisible: false });
+    }
+  },
+
+  applyAll: async () => {
+    const pendingOnly = get().pendingEdits.filter(
+      (e) => e.status === "pending"
+    );
+    for (const edit of pendingOnly) {
+      await get().applyEdit(edit.id);
+    }
+  },
+
+  rejectAll: () => {
+    const pendingIds = get()
+      .pendingEdits.filter((e) => e.status === "pending")
+      .map((e) => e.id);
+
+    set({ pendingEdits: [], currentEditIndex: 0, isCommandBarVisible: false });
+
+    const cb = get().syncLocksCallback;
+    if (cb) cb(get().getPendingLocks());
+
+    for (const editId of pendingIds) {
+      fetch("/api/pending-edits", {
+        method: "DELETE",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ editId }),
+      }).catch(() => undefined);
+    }
+  },
+
+  setCurrentEditIndex: (index) => {
+    const { pendingEdits } = get();
+    if (index >= 0 && index < pendingEdits.length) {
+      set({ currentEditIndex: index });
+    }
+  },
+
+  nextEdit: () => {
+    const { pendingEdits, currentEditIndex } = get();
+    if (!pendingEdits.some((e) => e.status === "pending")) return;
+    for (let i = currentEditIndex + 1; i < pendingEdits.length; i++) {
+      if (pendingEdits[i].status === "pending") {
+        set({ currentEditIndex: i });
+        return;
+      }
+    }
+    for (let i = 0; i < currentEditIndex; i++) {
+      if (pendingEdits[i].status === "pending") {
+        set({ currentEditIndex: i });
+        return;
+      }
+    }
+  },
+
+  prevEdit: () => {
+    const { pendingEdits, currentEditIndex } = get();
+    if (!pendingEdits.some((e) => e.status === "pending")) return;
+    for (let i = currentEditIndex - 1; i >= 0; i--) {
+      if (pendingEdits[i].status === "pending") {
+        set({ currentEditIndex: i });
+        return;
+      }
+    }
+    for (let i = pendingEdits.length - 1; i > currentEditIndex; i--) {
+      if (pendingEdits[i].status === "pending") {
+        set({ currentEditIndex: i });
+        return;
+      }
+    }
+  },
+
+  getCurrentEdit: () => {
+    const { pendingEdits, currentEditIndex } = get();
+    return pendingEdits[currentEditIndex] || null;
+  },
+
+  getPendingCount: () => {
+    return get().pendingEdits.filter((e) => e.status === "pending").length;
   },
 }));

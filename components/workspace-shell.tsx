@@ -11,13 +11,15 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import type { EditorView } from "@codemirror/view";
+import { useRouter, useSearchParams } from "next/navigation";
+import { EditorView } from "@codemirror/view";
 import { useSession } from "@/lib/use-session";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
+import EditCommandBar from "@/components/editor/edit-command-bar";
+import { useEditStore } from "@/stores/edit-store";
 import DocumentListPane from "@/components/document-list-pane";
 import MarkdownPreview from "@/components/markdown-preview";
 import { Toaster } from "@/components/ui/toast";
@@ -123,6 +125,7 @@ function EditorPane({
   attention: boolean;
   actor: { id: string; name: string; kind: "user" | "agent" };
 }) {
+  const router = useRouter();
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
   const [viewMode, setViewMode] = useState<EditorViewMode>("source");
@@ -159,6 +162,48 @@ function EditorPane({
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [fileId, applyUiPatch]);
+
+  // Pending-edit navigation: switch doc when the target edit lives in a
+  // different file (doc id is `${projectId}-${fileId}`), then scroll to the
+  // edit's startLine. Same-file jumps scroll the live view directly.
+  useEffect(() => {
+    const store = useEditStore.getState();
+    store.setNavigateToFileCallback((filePath, line) => {
+      const targetFileId = filePath || fileId;
+      const sameFile =
+        targetFileId === fileId ||
+        targetFileId.endsWith(fileId) ||
+        fileId.endsWith(targetFileId);
+
+      if (!sameFile) {
+        // The queued pendingScrollLine is consumed by the new editor mount
+        // once its Yjs sync completes.
+        router.push(`/?doc=${projectId}-${encodeURIComponent(targetFileId)}`);
+        return;
+      }
+
+      // Same file — scroll now.
+      const pending = useEditStore.getState().consumePendingScrollLine();
+      const targetLine = line ?? pending;
+      const view = editorViewRef.current;
+      if (targetLine && view) {
+        try {
+          const clamped = Math.max(
+            1,
+            Math.min(targetLine, view.state.doc.lines)
+          );
+          const pos = view.state.doc.line(clamped).from;
+          view.dispatch({
+            selection: { anchor: pos },
+            effects: EditorView.scrollIntoView(pos, { y: "center" }),
+          });
+        } catch {
+          // doc may be mid-update — ignore
+        }
+      }
+    });
+    return () => store.setNavigateToFileCallback(null);
+  }, [projectId, fileId, router]);
 
   return (
     <div
@@ -220,7 +265,9 @@ function EditorPane({
           </div>
         </div>
       </header>
-      <div className="flex-1 overflow-hidden">
+      <div className="relative flex-1 overflow-hidden">
+        {/* Cursor-style pending-edit command bar (overlays editor) */}
+        <EditCommandBar />
         {loading ? (
           <LoadingPane />
         ) : viewMode === "preview" ? (

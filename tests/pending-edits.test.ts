@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { promises as fs } from "fs";
+import * as Y from "yjs";
 import { getDb, resetDbForTests } from "../src/db";
 import {
   upsertSubject,
@@ -17,6 +18,11 @@ import {
   updatePendingEditStatus,
   deletePendingEdit,
 } from "../src/pending-edits";
+import {
+  createRelPosForEdit,
+  getLineFromRelPos,
+  type EditBlock,
+} from "../src/server/edit-position-tracker";
 
 const TEST_DIR = `/tmp/sumi-pending-test-${process.pid}`;
 process.env.SUMI_DATA_DIR = TEST_DIR;
@@ -124,5 +130,116 @@ describe("pending edits", () => {
     expect(getPendingEdit(db, edit.id)).not.toBeNull();
     expect(deletePendingEdit(db, edit.id)).toBe(true);
     expect(getPendingEdit(db, edit.id)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RelPos anchors — CRDT-stable positions survive line drift
+// ---------------------------------------------------------------------------
+
+describe("pending edits — RelativePosition", () => {
+  it("stores relPos anchors on proposed blocks", async () => {
+    const db = await getDb();
+    upsertSubject(db, { subjectId: "u1", kind: "user", displayName: "A" });
+    const project = createProject(db, { name: "x", ownerSubjectId: "u1" });
+
+    const ydoc = new Y.Doc();
+    const ytext = ydoc.getText("content");
+    ytext.insert(0, "l1\nl2\nl3\nl4\nl5\n");
+    const { startRelPos, endRelPos } = createRelPosForEdit(ytext, 2, 3);
+    expect(startRelPos).toBeTruthy();
+    expect(endRelPos).toBeTruthy();
+
+    const [edit] = addPendingEdit(db, {
+      projectId: project.id,
+      fileId: "a.md",
+      userId: "u1",
+      authorId: "a1",
+      blocks: [
+        { startLine: 2, endLine: 3, updated: "X", startRelPos: startRelPos!, endRelPos: endRelPos! },
+      ],
+    });
+
+    const stored = getPendingEdit(db, edit.id)!;
+    expect(stored.blocks[0].startRelPos).toEqual(startRelPos);
+    expect(stored.blocks[0].endRelPos).toEqual(endRelPos);
+
+    const listed = listPendingEdits(db, { projectId: project.id, userId: "u1" });
+    expect(listed[0].blocks[0].startRelPos).toEqual(startRelPos);
+
+    ydoc.destroy();
+  });
+
+  it("relPos resolves to shifted lines after intervening edits", async () => {
+    const db = await getDb();
+    upsertSubject(db, { subjectId: "u1", kind: "user", displayName: "A" });
+    const project = createProject(db, { name: "x", ownerSubjectId: "u1" });
+
+    const ydoc = new Y.Doc();
+    const ytext = ydoc.getText("content");
+    ytext.insert(0, "l1\nl2\nl3\nl4\nl5\n");
+
+    // Propose an edit anchored at lines 2-3
+    const { startRelPos, endRelPos } = createRelPosForEdit(ytext, 2, 3);
+    const block: EditBlock = {
+      startLine: 2,
+      endLine: 3,
+      updated: "NEW2\nNEW3",
+      startRelPos: startRelPos!,
+      endRelPos: endRelPos!,
+    };
+    const [edit] = addPendingEdit(db, {
+      projectId: project.id,
+      fileId: "a.md",
+      userId: "u1",
+      authorId: "a1",
+      blocks: [block],
+    });
+
+    // Intervening edit: another client inserts 2 lines at the top
+    ytext.insert(0, "a\nb\n");
+
+    // Apply-time resolution: stored lines (2-3) are stale; relPos → 4-5
+    const stored = getPendingEdit(db, edit.id)!;
+    const b = stored.blocks[0];
+    const s = getLineFromRelPos(ydoc, ytext, b.startRelPos);
+    const e = getLineFromRelPos(ydoc, ytext, b.endRelPos);
+    expect(s).toBe(4);
+    expect(e).toBe(5);
+    // Sanity: the resolved range still covers the original content
+    const lines = ytext.toString().split("\n");
+    expect(lines.slice(s! - 1, e!)).toEqual(["l2", "l3"]);
+
+    ydoc.destroy();
+  });
+
+  it("falls back to stored lines when a block has no relPos", async () => {
+    const db = await getDb();
+    upsertSubject(db, { subjectId: "u1", kind: "user", displayName: "A" });
+    const project = createProject(db, { name: "x", ownerSubjectId: "u1" });
+
+    // Legacy row — no anchors (pre-migration data path)
+    const [edit] = addPendingEdit(db, {
+      projectId: project.id,
+      fileId: "a.md",
+      userId: "u1",
+      authorId: "a1",
+      blocks: [{ startLine: 3, endLine: 4, updated: "Z" }],
+    });
+
+    const stored = getPendingEdit(db, edit.id)!;
+    expect(stored.blocks[0].startRelPos).toBeUndefined();
+
+    // ws-server apply path mirrors this: no anchors → use stored lines
+    const b = stored.blocks[0];
+    const ydoc = new Y.Doc();
+    const ytext = ydoc.getText("content");
+    ytext.insert(0, "l1\nl2\nl3\nl4\nl5\n");
+    const s = getLineFromRelPos(ydoc, ytext, b.startRelPos);
+    expect(s).toBeNull(); // → caller uses b.startLine
+    expect(b.startLine).toBe(3);
+    expect(b.endLine).toBe(4);
+
+    ydoc.destroy();
   });
 });

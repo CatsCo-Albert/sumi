@@ -53,7 +53,12 @@ import {
   generateUserName,
 } from "@/lib/utils";
 import { createMarkdownExtensions, createHtmlExtensions } from "./markdown-extensions";
-import { getInlineDiffExtensions, setCurrentFile, setYjsRefs as setDiffYjsRefs } from "./inline-diff-extension";
+import {
+  getInlineDiffExtensions,
+  setCurrentFile,
+  setPendingEditsEffect,
+  setYjsRefs as setDiffYjsRefs,
+} from "./inline-diff-extension";
 import {
   getLockExtensions,
   setOwnLocks,
@@ -222,6 +227,12 @@ export default function CollaborativeEditor({
           isConnected: true,
           isSynced: true,
         });
+        // A pending-edit navigation may have queued a scroll target before
+        // this doc finished syncing — consume it once content is ready.
+        const pendingLine = useEditStore.getState().consumePendingScrollLine();
+        if (pendingLine !== null && viewRef.current) {
+          scrollToLine(viewRef.current, pendingLine);
+        }
       }
     };
     provider.on("sync", handleSync);
@@ -346,6 +357,26 @@ export default function CollaborativeEditor({
     );
     useEditStore.getState().setYjsRefs(ydoc, ytext, fileId);
 
+    // Re-resolve RelPos → live line numbers whenever the Yjs doc drifts.
+    // Defer via rAF so we never dispatch a CM update inside a Yjs observe.
+    const handleYjsChange = () => {
+      requestAnimationFrame(() => {
+        useEditStore.getState().updateLineNumbersFromRelPos();
+        // Force the inline-diff decorations to recompute positions.
+        view.dispatch({
+          effects: setPendingEditsEffect.of(
+            useEditStore.getState().pendingEdits
+          ),
+        });
+      });
+    };
+    ytext.observe(handleYjsChange);
+
+    // NOTE: pendingLocks Y.Map sync (litewrite parity) is deferred —
+    // the locksMap wiring below already covers remote lock visibility.
+    // If we adopt their model, this is where ydoc.getMap("pendingLocks")
+    // ownership would move into the edit store.
+
     const pushOwnLocks = () => {
       const locks = useEditStore.getState().getEditLocks(fileId, effectiveUserId);
       setOwnLocks(view, locks);
@@ -380,6 +411,7 @@ export default function CollaborativeEditor({
 
     return () => {
       onEditorReadyRef.current?.(null);
+      ytext.unobserve(handleYjsChange);
       unsubscribeEdits();
       locksMap.unobserve(handleLocksChange);
       useEditStore.getState().setSyncLocksCallback(null);
@@ -440,4 +472,19 @@ function rectangularSelectionPlaceholder() {
 }
 function crosshairPlaceholder() {
   return [];
+}
+
+/** Scroll a 1-based line into view and place the cursor there. */
+function scrollToLine(view: EditorView, line: number) {
+  try {
+    const clamped = Math.max(1, Math.min(line, view.state.doc.lines));
+    const pos = view.state.doc.line(clamped).from;
+    view.dispatch({
+      selection: { anchor: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+    view.focus();
+  } catch {
+    // doc may be mid-sync — ignore
+  }
 }
