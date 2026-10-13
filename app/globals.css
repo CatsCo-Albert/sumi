@@ -1,0 +1,218 @@
+@import "tailwindcss";
+
+/*
+ * Apple-grade design tokens.
+ * Vocabulary: flat surfaces, hairline separators, single accent,
+ * blur reserved for true overlay surfaces (omni dock, menus).
+ */
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 4% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 4% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 4% 12%;
+  --muted: 240 4% 96%;
+  --muted-foreground: 240 4% 46%;
+  --accent: 240 4% 95%;
+  --accent-foreground: 240 4% 12%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  /* Apple system blue */
+  --primary: 211 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  /* hairline */
+  --border: 240 6% 90%;
+  --input: 240 6% 90%;
+  --ring: 211 100% 50%;
+  /* surfaces */
+  --sidebar: 0 0% 99%;
+  --sidebar-foreground: 240 4% 12%;
+  --sidebar-border: 240 6% 91%;
+  /* radius ladder */
+  --radius: 10px;
+
+  /* blur material — only for floating surfaces */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.06);
+
+  /* shadows: restrained, layered */
+  --shadow-xs: 0 0.5px 1.5px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
+
+  /* motion: spring-ish, no bounce exaggeration */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+  --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+.dark {
+  --background: 240 6% 10%;
+  --foreground: 0 0% 96%;
+  --card: 240 5% 12%;
+  --card-foreground: 0 0% 96%;
+  --popover: 240 6% 14%;
+  --popover-foreground: 0 0% 96%;
+  --muted: 240 4% 18%;
+  --muted-foreground: 240 5% 62%;
+  --accent: 240 4% 18%;
+  --accent-foreground: 0 0% 96%;
+  --destructive: 0 74% 58%;
+  --destructive-foreground: 0 0% 96%;
+  --primary: 210 100% 56%;
+  --primary-foreground: 0 0% 100%;
+  --border: 240 4% 20%;
+  --input: 240 4% 24%;
+  --ring: 210 100% 56%;
+  --sidebar: 240 5% 11%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 240 4% 18%;
+  --glass-bg: rgba(28, 28, 30, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-xs: 0 0.5px 1.5px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  html {
+    /* SF-like system stack */
+    font-family:
+      -apple-system,
+      BlinkMacSystemFont,
+      "SF Pro Text",
+      "SF Pro Display",
+      "Helvetica Neue",
+      system-ui,
+      sans-serif;
+    /* crisper on macOS */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    letter-spacing: -0.011em;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+  }
+}
+
+@layer utilities {
+  /* true macOS-vibrancy material, only for floating surfaces */
+  .material-glass {
+    background: var(--glass-bg);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border: 0.5px solid var(--glass-border);
+  }
+  .shadow-xs { box-shadow: var(--shadow-xs); }
+  .shadow-sm { box-shadow: var(--shadow-sm); }
+  .shadow-md { box-shadow: var(--shadow-md); }
+  .shadow-lg { box-shadow: var(--shadow-lg); }
+  .shadow-xl { box-shadow: var(--shadow-xl); }
+  .ease-out-quint { transition-timing-function: var(--ease-out); }
+  .ease-spring { transition-timing-function: var(--ease-spring); }
+
+  /* canvas retreat — the "spotlight" effect when the omni dock engages */
+  .canvas-retreat {
+    transform: scale(0.985);
+    filter: brightness(0.92) saturate(0.9);
+  }
+}
+
+/* CodeMirror base styling — minimal chrome */
+.cm-editor {
+  height: 100%;
+  font-size: 14px;
+}
+.cm-editor .cm-content {
+  font-family: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+  padding: 20px 0;
+}
+.cm-editor .cm-line {
+  padding: 0 24px;
+}
+.cm-editor .cm-gutters {
+  background: hsl(var(--background));
+  border-right: 0.5px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+.cm-editor .cm-activeLineGutter {
+  background: transparent;
+  color: hsl(var(--foreground));
+}
+.cm-editor .cm-activeLine {
+  background: hsl(var(--accent) / 0.35);
+}
+.cm-editor .cm-cursor {
+  border-left: 1.5px solid hsl(var(--primary));
+}
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: hsl(var(--primary) / 0.15);
+}
+
+/* collaborator remote carets (yCollab) */
+.cm-ySelectionCaret {
+  position: relative;
+  border-left: 1.5px solid;
+  margin-left: -1px;
+}
+.cm-ySelectionCaret > .cm-ySelectionInfo {
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  font-size: 11px;
+  font-family: -apple-system, sans-serif;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: white;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+  pointer-events: none;
+}
+.cm-ySelectionCaret:hover > .cm-ySelectionInfo,
+.cm-ySelectionCaret.cm-ySelectionCaretActive > .cm-ySelectionInfo {
+  opacity: 1;
+}
