@@ -120,6 +120,21 @@ pnpm dev
 
 Sign in at `/` with a CatsCo JWT, then open `?doc={projectId}-{fileId}`.
 
+## Status
+
+Working:
+- Yjs sync (markdown/html) — binary, awareness, offline buffer
+- Auth — CatsCo JWT (local verify) + `cc_*` ApiKey via CatsCo introspect
+- A2UI bridge — agents patch workspace UI via `POST /api/ui/publish` → SSE
+- Project/doc browser — `/` lists projects, creates docs
+- Members — owner adds `u{uid}`/`a{uid}` with `viewer|editor` role
+
+Stubbed / missing:
+- Agent invocation from the Omni dock — `src/agent-client.ts` is a CLI scaffold; needs a real LLM pipeline
+- Snapshot/restore — Redis optional, no version history UI
+- Visual diff — `inline-diff-extension` renders pending edits but no accept/reject UI
+- Doc delete / rename
+
 ## License
 
 MIT

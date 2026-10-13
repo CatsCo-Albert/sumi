@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
+import DocumentListPane from "@/components/document-list-pane";
 
 export default function WorkspaceShell() {
   const searchParams = useSearchParams();
@@ -71,7 +72,7 @@ export default function WorkspaceShell() {
             actor={actor}
           />
         ) : (
-          <WelcomePane />
+          <DocumentListPane />
         )}
       </div>
 
@@ -243,25 +244,6 @@ function splitDocId(docId: string): [string, string] {
 }
 
 // ---------------------------------------------------------------------------
-// Welcome pane
-// ---------------------------------------------------------------------------
-
-function WelcomePane() {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <div className="text-center">
-        <div className="text-[15px] font-medium text-foreground">
-          选择一个文档开始
-        </div>
-        <div className="mt-1 text-[13px] text-muted-foreground">
-          通过 URL <code className="text-[12px]">?doc=projectId-fileId</code> 打开
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Omni dock — floating AI command surface
 // ---------------------------------------------------------------------------
 
@@ -270,18 +252,34 @@ function OmniDock({ onClose }: { onClose: () => void }) {
   const consumePromptCommand = useUiStore((s) => s.consumePromptCommand);
   const pendingPromptCommands = useUiStore((s) => s.pendingPromptCommands);
   const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [response, setResponse] = useState<string | null>(null);
+
+  const submit = async () => {
+    const prompt = input.trim();
+    if (!prompt || busy) return;
+    setBusy(true);
+    setResponse(null);
+    try {
+      // Stub agent — echo back so the wiring is testable end-to-end.
+      // Real agent path goes through src/agent-client.ts.
+      setResponse(`收到「${prompt}」— agent 待接入`);
+      setInput("");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (promptCommand) {
       setInput(promptCommand.prompt);
       if (promptCommand.autoSend) {
-        // auto-submit pattern — placeholder until we wire the agent
-        consumePromptCommand();
-      } else {
-        consumePromptCommand();
+        submit();
       }
+      consumePromptCommand();
     }
-  }, [promptCommand, consumePromptCommand]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptCommand]);
 
   return (
     <div className="material-glass shadow-xl rounded-2xl p-1.5">
@@ -303,14 +301,17 @@ function OmniDock({ onClose }: { onClose: () => void }) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") onClose();
-            if (e.key === "Enter" && input.trim()) {
-              // placeholder: real agent invocation goes here
-              setInput("");
-            }
+            if (e.key === "Enter") submit();
           }}
+          disabled={busy}
           placeholder="让 Sumi 做点什么…"
-          className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted-foreground/60"
+          className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
         />
+        {response && (
+          <span className="max-w-[200px] truncate text-[11px] text-muted-foreground">
+            {response}
+          </span>
+        )}
         {pendingPromptCommands.length > 0 && (
           <span className="text-[11px] text-muted-foreground">
             +{pendingPromptCommands.length}
