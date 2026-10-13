@@ -690,7 +690,13 @@ const server = http.createServer(async (req, res) => {
 // WebSocket
 // ---------------------------------------------------------------------------
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  // Disable permessage-deflate — Node's native WebSocket (undici) sometimes
+  // negotiates it in a way that drops binary frames, and we don't need the
+  // bandwidth savings for local dev.
+  perMessageDeflate: false,
+});
 
 const heartbeat = setInterval(() => {
   wss.clients.forEach((client) => {
@@ -717,6 +723,15 @@ wss.on("connection", async (ws: WebSocket, req) => {
   ws.on("pong", () => {
     tracked.isAlive = true;
   });
+
+  // The y-websocket client sends its sync-step-1 immediately on `open` — long
+  // before auth + doc init complete. Buffer every inbound message until the
+  // real handler is attached so nothing is dropped silently.
+  const pendingMessages: Buffer[] = [];
+  const earlyMessageHandler = (data: Buffer) => {
+    pendingMessages.push(data);
+  };
+  ws.on("message", earlyMessageHandler);
 
   let requestUrl: URL;
   try {
@@ -825,6 +840,13 @@ wss.on("connection", async (ws: WebSocket, req) => {
 
   ws.on("message", (data: Buffer) => {
     try {
+      handleDocMessage(data);
+    } catch (err) {
+      console.error("❌ ws message error:", err);
+    }
+  });
+
+  function handleDocMessage(data: Buffer) {
       const message = new Uint8Array(data);
       const decoder = decoding.createDecoder(message);
       const messageType = decoding.readVarUint(decoder);
@@ -873,10 +895,17 @@ wss.on("connection", async (ws: WebSocket, req) => {
           } catch { /* ignore */ }
         }
       }
-    } catch (err) {
-      console.error("❌ ws message error:", err);
+  }
+
+  // Swap the early buffering handler for the real one and replay anything that
+  // arrived while getYDoc was still loading.
+  ws.off("message", earlyMessageHandler);
+  for (const m of pendingMessages) {
+    try { handleDocMessage(m); } catch (err) {
+      console.error("❌ ws message error (replayed):", err);
     }
-  });
+  }
+  pendingMessages.length = 0;
 
   // Broadcast doc updates to other clients
   const updateHandler = (update: Uint8Array, origin: unknown) => {
