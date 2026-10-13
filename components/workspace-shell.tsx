@@ -116,6 +116,9 @@ export default function WorkspaceShell() {
 
 type EditorViewMode = "source" | "preview" | "split";
 
+// NEXT_PUBLIC_TAP_ENABLED —— TAP ghost-text 的功能开关（默认关闭，opt-in）
+const TAP_AVAILABLE = process.env.NEXT_PUBLIC_TAP_ENABLED === "true";
+
 function EditorPane({
   documentId,
   attention,
@@ -129,6 +132,7 @@ function EditorPane({
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
   const [viewMode, setViewMode] = useState<EditorViewMode>("source");
+  const [tapEnabled, setTapEnabled] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
   const editorViewRef = useRef<EditorView | null>(null);
   const applyUiPatch = useUiStore((s) => s.applyUiPatch);
@@ -246,6 +250,21 @@ function EditorPane({
         </div>
         {/* Live collaborators — colored dots + tooltip name */}
         <div className="ml-auto flex items-center gap-2">
+          {/* TAP ghost-text 补全开关 */}
+          {TAP_AVAILABLE && (
+            <button
+              onClick={() => setTapEnabled((v) => !v)}
+              title={tapEnabled ? "关闭 TAP 补全" : "开启 TAP 补全"}
+              className={cn(
+                "rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide transition-colors",
+                tapEnabled
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border/60 text-muted-foreground/70 hover:text-foreground"
+              )}
+            >
+              TAP
+            </button>
+          )}
           {collaborators.length > 1 && (
             <div className="flex items-center -space-x-1.5">
               {collaborators.slice(0, 5).map((c, i) => (
@@ -286,6 +305,7 @@ function EditorPane({
                 userName={actor.name}
                 initialContent={initialContent ?? ""}
                 prefillOnConnect
+                tapEnabled={tapEnabled}
                 onContentChange={handleContentChange}
                 onCollaboratorsChange={setCollaborators}
                 onEditorReady={(v) => (editorViewRef.current = v)}
@@ -304,6 +324,7 @@ function EditorPane({
             userName={actor.name}
             initialContent={initialContent ?? ""}
             prefillOnConnect
+            tapEnabled={tapEnabled}
             onContentChange={handleContentChange}
             onCollaboratorsChange={setCollaborators}
             onEditorReady={(v) => (editorViewRef.current = v)}

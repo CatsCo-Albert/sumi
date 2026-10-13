@@ -68,6 +68,7 @@ import {
   setLockYjsRefs,
   type RemoteLockInfo,
 } from "./pending-edit-lock-extension";
+import { tapExtension } from "./tap-completion";
 import { useEditStore } from "@/stores/edit-store";
 
 export type EditorMode = "markdown" | "html";
@@ -98,6 +99,8 @@ export interface CollaborativeEditorProps {
   userImage?: string;
   onEditorReady?: (view: EditorView | null) => void;
   onCursorLineChange?: (line: number) => void;
+  /** TAP ghost-text 补全开关（env gate 之外的用户侧开关）。 */
+  tapEnabled?: boolean;
   onConnectionStatusChange?: (status: {
     isConnected: boolean;
     isSynced: boolean;
@@ -121,11 +124,13 @@ export default function CollaborativeEditor({
   onEditorReady,
   onCursorLineChange,
   onConnectionStatusChange,
+  tapEnabled = false,
 }: CollaborativeEditorProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const providerRef = useRef<WebsocketProvider | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
+  const tapCompartmentRef = useRef<Compartment | null>(null);
 
   const [, setCollaborators] = useState<CollaboratorInfo[]>([]);
   const [, setIsSynced] = useState(false);
@@ -137,6 +142,7 @@ export default function CollaborativeEditor({
   const onConnectionStatusChangeRef = useRef(onConnectionStatusChange);
   const onEditorReadyRef = useRef(onEditorReady);
   const initialContentRef = useRef(initialContent);
+  const tapEnabledRef = useRef(tapEnabled);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
@@ -145,6 +151,7 @@ export default function CollaborativeEditor({
     onConnectionStatusChangeRef.current = onConnectionStatusChange;
     onEditorReadyRef.current = onEditorReady;
     initialContentRef.current = initialContent;
+    tapEnabledRef.current = tapEnabled;
   });
 
   const effectiveWsUrl =
@@ -266,6 +273,8 @@ export default function CollaborativeEditor({
 
     // --- CodeMirror ------------------------------------------------------------
     const languageCompartment = new Compartment();
+    const tapCompartment = new Compartment();
+    tapCompartmentRef.current = tapCompartment;
     const languageExtensions =
       mode === "html" ? createHtmlExtensions() : createMarkdownExtensions();
 
@@ -313,6 +322,10 @@ export default function CollaborativeEditor({
         ]),
 
         languageCompartment.of(languageExtensions),
+        // TAP ghost-text 补全 —— compartment 化，开关切换不重建编辑器
+        tapCompartment.of(
+          tapExtension(tapEnabledRef.current, { projectId, fileId })
+        ),
 
         // Yjs collab — the core
         yCollab(ytext, provider.awareness),
@@ -372,19 +385,8 @@ export default function CollaborativeEditor({
     };
     ytext.observe(handleYjsChange);
 
-    // NOTE: pendingLocks Y.Map sync (litewrite parity) is deferred —
-    // the locksMap wiring below already covers remote lock visibility.
-    // If we adopt their model, this is where ydoc.getMap("pendingLocks")
-    // ownership would move into the edit store.
-
-    const pushOwnLocks = () => {
-      const locks = useEditStore.getState().getEditLocks(fileId, effectiveUserId);
-      setOwnLocks(view, locks);
-    };
-    const unsubscribeEdits = useEditStore.subscribe(pushOwnLocks);
-    pushOwnLocks();
-
-    // Sync own locks into Y.Map so remote clients can decorate them
+    // pendingLocks Y.Map —— 自己的 pending-edit locks 推进共享 map，
+    // 远端客户端据此渲染灰色锁定行 + 编辑者角标。
     useEditStore.getState().setSyncLocksCallback((locks) => {
       const keysToDelete: string[] = [];
       locksMap.forEach((lock, key) => {
@@ -395,6 +397,15 @@ export default function CollaborativeEditor({
         locks.forEach((l) => locksMap.set(l.id, l));
       });
     });
+
+    // pendingEdits 变化 → 更新本地装饰 + 同步进 Y.Map（先清旧 own-locks）
+    const pushOwnLocks = () => {
+      const locks = useEditStore.getState().getEditLocks(fileId, effectiveUserId);
+      setOwnLocks(view, locks);
+      useEditStore.getState().syncLocksCallback?.(locks);
+    };
+    const unsubscribeEdits = useEditStore.subscribe(pushOwnLocks);
+    pushOwnLocks();
 
     const handleLocksChange = () => {
       const remote: RemoteLockInfo[] = [];
@@ -415,6 +426,14 @@ export default function CollaborativeEditor({
       unsubscribeEdits();
       locksMap.unobserve(handleLocksChange);
       useEditStore.getState().setSyncLocksCallback(null);
+      // 卸下自己的 locks，避免残留幽灵锁定行
+      ydoc.transact(() => {
+        const stale: string[] = [];
+        locksMap.forEach((lock, key) => {
+          if (lock.userId === effectiveUserId) stale.push(key);
+        });
+        stale.forEach((k) => locksMap.delete(k));
+      });
       view.destroy();
       provider.awareness.off("change", updateCollaborators);
       provider.destroy();
@@ -426,6 +445,18 @@ export default function CollaborativeEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, fileId, effectiveWsUrl, mode, prefillOnConnect]);
+
+  // --- TAP 开关：compartment reconfigure，不触碰 ydoc/provider -------------
+  useEffect(() => {
+    const view = viewRef.current;
+    const compartment = tapCompartmentRef.current;
+    if (!view || !compartment) return;
+    view.dispatch({
+      effects: compartment.reconfigure(
+        tapExtension(tapEnabled, { projectId, fileId })
+      ),
+    });
+  }, [tapEnabled, projectId, fileId]);
 
   return (
     <div
