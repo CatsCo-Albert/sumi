@@ -5,7 +5,10 @@
  *   - Authorization: Bearer <jwt>
  *   - Authorization: ApiKey <cc_...>
  *   - ?token=<jwt> / ?api_key=<cc_...>
- *   - Cookie `cc_token` or `cats_token` for browser sessions
+ *
+ * Cookie-based browser sessions are not implemented yet: the sign-in screen
+ * stores the token in sessionStorage and sends it as a Bearer header. Keep this
+ * list in sync with `extractCredential` in src/auth/actor.ts.
  */
 
 import { getDb } from "@/src/db";

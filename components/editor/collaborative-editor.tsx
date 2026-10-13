@@ -50,6 +50,7 @@ import {
   getUserColorById,
   generateUserColor,
   generateUserName,
+  resolveWsUrl,
 } from "@/lib/utils";
 import { createMarkdownExtensions, createHtmlExtensions } from "./markdown-extensions";
 import { getInlineDiffExtensions, setCurrentFile, setYjsRefs as setDiffYjsRefs } from "./inline-diff-extension";
@@ -141,11 +142,7 @@ export default function CollaborativeEditor({
     initialContentRef.current = initialContent;
   });
 
-  const effectiveWsUrl =
-    wsUrl ||
-    (typeof window !== "undefined"
-      ? `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.hostname}:1234`
-      : "ws://localhost:1234");
+  const effectiveWsUrl = wsUrl || resolveWsUrl();
 
   // --- Restore token: wipe and re-seed --------------------------------------
   useEffect(() => {

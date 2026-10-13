@@ -31,3 +31,22 @@ const NAMES = [
 export function generateUserName(): string {
   return NAMES[Math.floor(Math.random() * NAMES.length)];
 }
+
+/**
+ * Resolve the collaboration WebSocket URL used by the browser editor.
+ *
+ * Precedence: explicit prop → NEXT_PUBLIC_WS_URL → same host on WS_PORT.
+ * The port used to be hard-coded to 1234, which silently pointed every
+ * non-default deployment (including reverse-proxied ones) at the wrong port.
+ * NEXT_PUBLIC_WS_PORT lets the deployed build agree with the server's WS_PORT.
+ */
+export function resolveWsUrl(): string {
+  const configured = process.env.NEXT_PUBLIC_WS_URL;
+  if (configured) return configured;
+
+  if (typeof window === "undefined") return "ws://localhost:1234";
+
+  const port = process.env.NEXT_PUBLIC_WS_PORT || "1234";
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${scheme}//${location.hostname}:${port}`;
+}
