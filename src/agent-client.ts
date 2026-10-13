@@ -1,20 +1,23 @@
 /**
- * XiaoBa-CLI connection helpers.
+ * Agent connection helpers for external CLIs and bots.
  *
- * XiaoBa agents are CatsCo bots — they authenticate with the same
- * `cc_*` ApiKey they already use for cats-company. Sumi does the
- * introspection hop so the CLI doesn't need to know any internal secret.
+ * Agents authenticate with a CatsCo `cc_*` ApiKey — the same credential
+ * they already use to talk to cats-company. Sumi handles the introspection
+ * hop so clients never need to know any internal secret.
  *
- * Typical usage from the CLI:
+ * Example:
  *
- *   import { connectSumi } from "xiaoba-sumishim";
+ *   import { connectSumi } from "sumi/agent-client";
+ *
  *   const conn = await connectSumi({
  *     wsUrl: "wss://sumi.example.com",
  *     apiKey: process.env.CATSCO_API_KEY,   // cc_*
  *     projectId: "prj_xxx",
  *     fileId: "notes/intro.md",
+ *     displayName: "my-agent",
  *   });
- *   conn.ytext.insert(0, "hello from xiaoba\n");
+ *   conn.ytext.insert(0, "hello\n");
+ *   conn.close();
  */
 
 import * as Y from "yjs";
@@ -84,8 +87,8 @@ export async function connectSumi(opts: ConnectOptions): Promise<SumiConnection>
 }
 
 /**
- * Write into a document through the WS server — no awareness, no sync.
- * Useful for one-shot edits where you don't need live presence.
+ * Write into a document through the WS server's HTTP admin surface — no
+ * awareness, no live sync required. Useful for one-shot edits.
  *
  * Requires INTERNAL_API_SECRET — only usable server-side.
  */

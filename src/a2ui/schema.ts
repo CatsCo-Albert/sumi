@@ -1,7 +1,7 @@
 /**
  * A2UI schema — declarative UI patches emitted by agents / automation.
  *
- * Sumi distills this from paperanim/lib/a2ui. Two layers:
+ * Sumiu0027s A2UI layer. Two layers:
  *   - `UiPatch`       — a small discriminated union of *structural* commands
  *                       (focus a panel, open a document, resize a pane…)
  *   - `JsonRender`    — a payload meant to be rendered as a rich UI card

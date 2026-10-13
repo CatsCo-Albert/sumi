@@ -3,7 +3,7 @@
 /**
  * Workspace UI store — applies UiPatch commands pushed by the SSE endpoint.
  *
- * Pattern lifted from paperanim's workspace-ui-store: each patch sets the
+ * Pattern lifted from the reference workspace-ui-store: each patch sets the
  * appropriate state slice AND fires a `blockAttentionSignal` so the shell
  * can flash which pane changed.
  */

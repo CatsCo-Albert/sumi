@@ -3,7 +3,7 @@
 /**
  * useUiEvents — subscribe to the SSE endpoint and dispatch patches into the store.
  *
- * Mirrors paperanim's events route semantics:
+ * Mirrors the reference events route semantics:
  *   - server sends `event: ui_patch` + `data: <UiPatch JSON>`
  *   - handshake emits `ready`, heartbeat emits `ping`
  *   - reconnect replays missed events via the durable log

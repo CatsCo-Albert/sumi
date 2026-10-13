@@ -3,7 +3,7 @@
 /**
  * Pending-edit store — agent-proposed changes awaiting human review.
  *
- * Distilled from paperanim's edit-store. Single responsibility:
+ * Inspired by a distilled architecture's edit-store. Single responsibility:
  *   - hold pendingEdits (per project, per file)
  *   - resolve current line numbers via Yjs RelPos at apply time
  *   - expose EditLocks for the editor to decorate/block

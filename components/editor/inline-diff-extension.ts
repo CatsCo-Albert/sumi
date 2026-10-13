@@ -6,7 +6,7 @@
  * Red-deleted lines = original content; floating green widget below shows the
  * proposed replacement. Keep/Undo buttons call into edit-store.
  *
- * Distilled from paperanim — same RelPos-driven line resolution, Apple-tinted
+ * Inspired by a distilled architecture — same RelPos-driven line resolution, Apple-tinted
  * palette (no saturated backgrounds, hairline borders, system-ui for chrome).
  */
 

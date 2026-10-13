@@ -1,7 +1,7 @@
 /**
  * SSE endpoint — pushes UiPatch events to the client.
  *
- * Adapted from paperanim/app/api/workspace-ui/events/route.ts; the transport
+ * Adapted from the SSE event route; the transport
  * is ReadableStream over Response so it works under Next.js App Router.
  *
  * Auth is currently open (single-user dev mode); wire getUserId() to your

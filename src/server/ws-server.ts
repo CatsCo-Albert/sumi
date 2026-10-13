@@ -1,7 +1,7 @@
 /**
  * Sumi Yjs WebSocket collaboration server.
  *
- * Distilled from paperanim/server/ws-server.ts — keeps:
+ * Based on a distilled Yjs sync server — keeps:
  *   - y-protocols sync + awareness
  *   - Redis persistence (optional via REDIS_URL)
  *   - Internal HTTP admin surface (/clear, /replace, /doc, /rooms,

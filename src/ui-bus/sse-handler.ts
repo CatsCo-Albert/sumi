@@ -9,7 +9,7 @@
  *     ...
  *   });
  *
- * Behavior mirrors paperanim/app/api/workspace-ui/events/route.ts:
+ * Behavior mirrors the SSE event route:
  *   - initial `ready` handshake frame
  *   - replay of recent events
  *   - live push via in-process subscription

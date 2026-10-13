@@ -13,4 +13,4 @@ export {
   sha256Hex,
 } from "./auth/catsco";
 export type { CatsCoUser, CatsCoAgent, IntrospectResult } from "./auth/catsco";
-export * from "./xiaoba";
+export * from "./agent-client";

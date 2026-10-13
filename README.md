@@ -1,111 +1,125 @@
 # Sumi
 
-Collaborative markdown/html editor substrate, distilled from `~/Developer/paperanim`. Yjs sync engine + CatsCo-driven identity + A2UI event bus.
+Real-time collaborative markdown/html editor substrate. Yjs sync + CatsCo SSO + agent-driven UI patches (A2UI).
+
+Built for multi-actor collaboration — humans and bots share the same document surface with presence, edit locks, and structured UI commands.
 
 ## Stack
 
-- **Frontend**: Next.js 15 + React 19 + Tailwind 4 + zustand + CodeMirror 6 + y-codemirror.next
-- **Sync**: self-hosted `y-websocket` server with optional Redis persistence
-- **Auth**: **CatsCo SSO** — JWT (users) + `cc_*` ApiKey (bots/agents), no local user DB
-- **Events**: SSE → `applyUiPatch`
-- **Persistence**: `node:sqlite` for Sumi-local projections (subjects cache, projects, memberships, docs)
+- **Frontend** — Next.js 15 + React 19 + Tailwind 4 + zustand + CodeMirror 6 + y-codemirror.next
+- **Sync** — self-hosted `y-websocket` server, optional Redis persistence
+- **Identity** — CatsCo SSO (JWT for humans, `cc_*` ApiKey for agents)
+- **Event bus** — SSE → declarative UI patches
+- **Persistence** — `node:sqlite` (subjects cache, projects, memberships, docs)
+
+## What's inside
+
+```
+app/                          Next.js App Router
+├── api/auth/me               whoami
+├── api/projects              create / list
+├── api/projects/[id]/{members,documents}
+├── api/documents/content     persisted read/write
+├── api/edits/apply           apply pending edit → ws-server
+├── api/ui/events             SSE stream
+├── api/ui/publish            emit UiPatch (internal)
+├── layout.tsx + page.tsx + globals.css
+components/
+├── workspace-shell.tsx       Canvas + dim + floating omni dock
+└── editor/
+    ├── collaborative-editor.tsx
+    ├── inline-diff-extension.ts
+    ├── pending-edit-lock-extension.ts
+    └── markdown-extensions.ts
+stores/                       zustand — ui-store + edit-store
+lib/                          hooks, http-auth, utils
+src/                          portable substrate
+├── server/ws-server.ts       Yjs WS + HTTP admin surface
+├── server/yjs-persistence.ts Redis list-per-doc
+├── server/edit-position-tracker.ts  RelPos math
+├── auth/{catsco,actor,identity}.ts
+├── a2ui/{schema,validate}.ts
+├── ui-bus/{event-bus,sse-handler}.ts
+├── storage/                  local FS
+├── db/                       sqlite migrations
+└── agent-client.ts           connectSumi() for external CLIs
+tests/                        vitest + e2e scripts
+```
 
 ## Identity model
 
-Sumi does not store users or passwords. Two principals, both minted by cats-company:
+Two principals, both minted by CatsCo:
 
 | Principal | Credential | Resolution |
 |---|---|---|
-| **User** | CatsCo JWT (`Bearer` or `?token=`) | verified locally with shared `OC_JWT_SECRET` |
-| **Agent / Bot** | CatsCo ApiKey (`ApiKey cc_*` or `?api_key=`) | introspected via CatsCo `POST /api/account/introspect` |
+| **User** | `Bearer` JWT or `?token=` | verified locally with `OC_JWT_SECRET` |
+| **Agent** | `ApiKey cc_*` or `?api_key=` | introspected via `POST /api/account/introspect` |
 
-Sumi caches subjects in `subjects` (subject_id = `u{uid}` / `a{uid}`) so project_members has a stable foreign key.
-
-### Required env
+Sumi caches resolved subjects (`u{uid}` / `a{uid}`) so memberships have a stable key.
 
 ```bash
-OC_JWT_SECRET=…             # must match cats-company's secret
-CATSCO_BASE_URL=http://localhost:8080
-CATSCO_SERVICE_TOKEN=cats_svc_…   # service token w/ account.introspect scope
+OC_JWT_SECRET=…             # shared with cats-company
+CATSCO_BASE_URL=…
+CATSCO_SERVICE_TOKEN=…      # scope: account.introspect
+INTERNAL_API_SECRET=…       # /admin, /replace, /clear, /ui/publish
 WS_PORT=1234
-INTERNAL_API_SECRET=…       # for /replace /clear /admin + ui/publish
 ```
 
-## For humans
-
-1. Grab a JWT from cats-company (`GenerateToken` or `GeneratePersistentUserToken` for desktop).
-2. Paste into the Sumi sign-in screen — stored in `sessionStorage`.
-3. Editor + SSE send it as `?token=` / `Authorization: Bearer`.
-
-## For XiaoBa-CLI (agents)
-
-Use your existing `cc_*` ApiKey — no new credential needed:
+## Connect an agent
 
 ```ts
-import { connectSumi } from "sumi/xiaoba";
+import { connectSumi } from "sumi/agent-client";
 
 const conn = await connectSumi({
   wsUrl: "wss://sumi.example.com",
-  apiKey: process.env.CATSCO_API_KEY,     // cc_…
+  apiKey: process.env.CATSCO_API_KEY,
   projectId: "prj_xxx",
   fileId: "notes/intro.md",
-  displayName: "xiaoba",
+  displayName: "my-agent",
 });
 
-conn.ytext.insert(0, "# hello\n");
+conn.ytext.insert(0, "hello\n");
 conn.provider.awareness.setLocalStateField("vibeWriting", "notes/intro.md");
 conn.close();
 ```
 
-Or hit the raw URL:
-
-```
-wss://sumi.example.com/prj_xxx-notes%2Fintro.md?api_key=cc_…
-```
+Raw URL form: `wss://sumi.example.com/prj_xxx-notes%2Fintro.md?api_key=cc_…`
 
 ## REST API
 
 ```
-GET  /api/auth/me                                  → current actor
-
-POST /api/projects              { name }           (human JWT only)
-GET  /api/projects                                 → projects I can see
+GET  /api/auth/me
+POST /api/projects              { name }
+GET  /api/projects
 POST /api/projects/:id/members  { subjectId, role }
 DELETE /api/projects/:id/members { subjectId }
 GET  /api/projects/:id/members
-
 POST /api/projects/:id/documents { fileId, title }
 GET  /api/projects/:id/documents
-
 GET  /api/documents/content?projectId&filePath
 PUT  /api/documents/content  { projectId, filePath, content }
-
 POST /api/edits/apply          { projectId, filePath, blocks }
-                                                     → applies via ws-server
-
 POST /api/ui/publish           { userId, projectId, patch }
-GET  /api/ui/events                                  → SSE stream
+GET  /api/ui/events                                  → SSE
 ```
 
-## WS endpoints (unchanged from earlier pass)
+WS server mutating routes require `x-internal-secret`. Room naming: `{projectId}-{fileId}`.
 
-`x-internal-secret` required for mutating routes. Doc rooms are `{projectId}-{fileId}`; connection requires either `?token=<jwt>` or `?api_key=<cc_…>` plus a `project_members` row.
-
-## Tests
+## Quick start
 
 ```bash
-pnpm test            # 21 unit tests
-pnpm typecheck
-pnpm build
+pnpm install
 
-# E2E auth — seeded sqlite + mocked introspect
-SUMI_DATA_DIR=/tmp/x WS_PORT=12346 pnpm ws-server &
-SUMI_DATA_DIR=/tmp/x WS_PORT=12346 node tests/e2e-auth.mjs
+# Terminal 1: Yjs server
+OC_JWT_SECRET=… CATSCO_BASE_URL=… CATSCO_SERVICE_TOKEN=… \
+INTERNAL_API_SECRET=… pnpm ws-server
+
+# Terminal 2: Next.js
+pnpm dev
 ```
 
-## Not included
+Sign in at `/` with a CatsCo JWT, then open `?doc={projectId}-{fileId}`.
 
-- CatsCo's own login UI — Sumi expects a JWT produced elsewhere
-- Magic-link / password — CatsCo owns that
-- SSO providers — CatsCo owns that too
-- Agent runtime / LLM — transport only, AI is XiaoBa's job
+## License
+
+MIT

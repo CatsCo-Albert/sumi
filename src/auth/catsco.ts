@@ -13,9 +13,9 @@
  *      - calls CatsCo `POST /api/account/introspect` with a `Service` token
  *      - returns the bot's uid; we treat it as an "agent" principal
  *
- * A third internal flow exists for XiaoBa-CLI:
- *   - XiaoBa connects with its own `cc_*` ApiKey and Sumi proxies
- *     introspection; the CLI never needs to know Sumi's secret.
+ * A third internal flow exists for CLIs:
+ *   - CLI connects with its own `cc_*` ApiKey and Sumi proxies
+ *     introspection; clients never need to know Sumi's secret.
  */
 
 import * as jose from "jose";
@@ -107,8 +107,8 @@ export interface IntrospectResult {
 }
 
 /**
- * Call CatsCo's introspection endpoint. The Service token is ours — the CLI
- * never sees it. Returns null if CATSCO_SERVICE_TOKEN isn't configured.
+ * Call CatsCo's introspection endpoint. The Service token is ours — clients
+ * never see it. Returns null if CATSCO_SERVICE_TOKEN isn't configured.
  */
 export async function introspectToken(
   token: string

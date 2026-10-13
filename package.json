@@ -1,8 +1,8 @@
 {
   "name": "sumi",
   "version": "0.1.0",
-  "description": "Sumi — collaborative markdown/html editing substrate (Yjs sync + AX event bus), distilled from paperanim",
-  "license": "AGPL-3.0-only",
+  "description": "Sumi — collaborative markdown/html editor substrate. Yjs sync + CatsCo SSO + agent-driven UI patches.",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
