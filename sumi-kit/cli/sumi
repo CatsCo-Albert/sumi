@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""
+Sumi agent CLI — call Sumi's HTTP/WS APIs from any agent runtime.
+
+Auth (pick one):
+  export SUMI_API_KEY="cc_..."          # CatsCo ApiKey (subject auto-derived)
+  export SUMI_TOKEN="eyJ..."            # session JWT
+
+Always:
+  export SUMI_BASE_URL="http://localhost:3000"
+  export SUMI_WS_URL="ws://localhost:12345"   # only needed for connect
+
+Usage:
+  sumi whoami
+  sumi list-projects
+  sumi list-docs --project prj_x
+  sumi read-doc --project prj_x --file notes/intro.md
+  sumi propose-edit --project prj_x --file notes/intro.md --blocks '[...]' [--desc "..."]
+  sumi list-pending --project prj_x
+  sumi pending-status --project prj_x
+  sumi get-onboard-prompt --project prj_x [--file notes/intro.md]
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from typing import Any
+
+
+def _env(name: str, default: str | None = None) -> str:
+    v = os.environ.get(name)
+    if v is not None:
+        return v
+    if default is not None:
+        return default
+    raise SystemExit(f"missing env: {name}")
+
+
+def _headers() -> dict[str, str]:
+    h = {"Content-Type": "application/json"}
+    key = os.environ.get("SUMI_API_KEY")
+    tok = os.environ.get("SUMI_TOKEN")
+    if key:
+        h["Authorization"] = f"Bearer {key}"
+    elif tok:
+        h["Authorization"] = f"Bearer {tok}"
+    else:
+        raise SystemExit("set SUMI_API_KEY or SUMI_TOKEN")
+    return h
+
+
+def _req(method: str, path: str, body: Any = None, base: str | None = None) -> dict:
+    url = (base or _env("SUMI_BASE_URL", "http://localhost:3000")) + path
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=_headers(), method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        body_text = e.read().decode()[:500]
+        raise SystemExit(f"HTTP {e.code} {path}: {body_text}")
+    except urllib.error.URLError as e:
+        raise SystemExit(f"connect failed {url}: {e.reason}")
+
+
+def _pp(x: Any) -> None:
+    print(json.dumps(x, indent=2, ensure_ascii=False))
+
+
+def cmd_whoami(_: argparse.Namespace) -> None:
+    r = _req("GET", "/api/auth/me")
+    _pp(r)
+
+
+def cmd_list_projects(_: argparse.Namespace) -> None:
+    _pp(_req("GET", "/api/projects"))
+
+
+def cmd_list_docs(a: argparse.Namespace) -> None:
+    _pp(_req("GET", f"/api/projects/{a.project}/documents"))
+
+
+def cmd_list_members(a: argparse.Namespace) -> None:
+    _pp(_req("GET", f"/api/projects/{a.project}/members"))
+
+
+def cmd_read_doc(a: argparse.Namespace) -> None:
+    r = _req("GET", f"/api/documents/content?projectId={a.project}&fileId={urllib.request.quote(a.file)}")
+    if a.raw:
+        print(r.get("content", ""))
+    else:
+        _pp(r)
+
+
+def cmd_propose_edit(a: argparse.Namespace) -> None:
+    blocks = json.loads(a.blocks)
+    if not isinstance(blocks, list):
+        raise SystemExit("--blocks must be a JSON array")
+    body = {
+        "projectId": a.project,
+        "fileId": a.file,
+        "blocks": blocks,
+    }
+    if a.desc:
+        body["description"] = a.desc
+    _pp(_req("POST", "/api/pending-edits", body))
+
+
+def cmd_list_pending(a: argparse.Namespace) -> None:
+    _pp(_req("GET", f"/api/pending-edits?projectId={a.project}"))
+
+
+def cmd_pending_status(a: argparse.Namespace) -> None:
+    r = _req("GET", f"/api/pending-edits?projectId={a.project}")
+    edits = r.get("pendingEdits", [])
+    pending = [e for e in edits if e.get("status") == "pending"]
+    print(f"{len(pending)} pending · {len(edits)} total")
+    for e in pending:
+        for b in e.get("blocks", []):
+            print(f"  {e.get('filePath','?')} L{b.get('startLine')}-{b.get('endLine')}: {(e.get('description') or '')[:60]}")
+
+
+def cmd_apply_edit(a: argparse.Namespace) -> None:
+    _pp(_req("POST", "/api/edits/apply", {"id": a.id}))
+
+
+def cmd_reject_edit(a: argparse.Namespace) -> None:
+    _pp(_req("DELETE", f"/api/pending-edits?id={a.id}"))
+
+
+def cmd_onboard(a: argparse.Namespace) -> None:
+    params = f"fileId={urllib.request.quote(a.file)}" if a.file else ""
+    r = _req("GET", f"/api/projects/{a.project}/agent-setup?{params}")
+    if a.raw:
+        print(r.get("instructions", ""))
+    else:
+        _pp(r)
+
+
+def cmd_heartbeat(a: argparse.Namespace) -> None:
+    # Stub — no heartbeat endpoint yet; agents that want presence can call /api/auth/me
+    _pp(_req("GET", "/api/auth/me"))
+
+
+def cmd_connect(a: argparse.Namespace) -> None:
+    """
+    Interactive-ish: prints WS URL + handshake example, then streams inbound
+    events via y-protocols. For real collab, use a WS client in your own runtime.
+    """
+    ws_url = _env("SUMI_WS_URL", "ws://localhost:12345")
+    doc = f"{a.project}-{a.file}"
+    print(f"# Sumi realtime sync")
+    print(f"# room: {doc}")
+    print(f"# url:  {ws_url}")
+    print()
+    print("import asyncio, json")
+    print("import websockets, y_py as Y")
+    print()
+    print(f"async def run():")
+    print(f'    doc = Y.Doc()')
+    print(f'    async with websockets.connect("{ws_url}") as ws:')
+    print(f'        await Y.sync(doc, ws)')
+    print(f'        text = doc.get_text("content")')
+    print(f'        text.observe(lambda e: print("remote change:", e.delta))')
+    print(f'        await asyncio.Future()')
+    print()
+    print("# For simple read-only read: use `sumi read-doc` (HTTP).")
+    print("# For bidirectional edit: connect the WS above with y-webrtc/y-websocket.")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(prog="sumi", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("whoami"); s.set_defaults(fn=cmd_whoami)
+    s = sub.add_parser("list-projects"); s.set_defaults(fn=cmd_list_projects)
+    s = sub.add_parser("list-docs"); s.add_argument("--project", required=True); s.set_defaults(fn=cmd_list_docs)
+    s = sub.add_parser("list-members"); s.add_argument("--project", required=True); s.set_defaults(fn=cmd_list_members)
+    s = sub.add_parser("read-doc"); s.add_argument("--project", required=True); s.add_argument("--file", required=True); s.add_argument("--raw", action="store_true"); s.set_defaults(fn=cmd_read_doc)
+    s = sub.add_parser("propose-edit"); s.add_argument("--project", required=True); s.add_argument("--file", required=True); s.add_argument("--blocks", required=True); s.add_argument("--desc"); s.set_defaults(fn=cmd_propose_edit)
+    s = sub.add_parser("list-pending"); s.add_argument("--project", required=True); s.set_defaults(fn=cmd_list_pending)
+    s = sub.add_parser("pending-status"); s.add_argument("--project", required=True); s.set_defaults(fn=cmd_pending_status)
+    s = sub.add_parser("apply-edit"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_apply_edit)
+    s = sub.add_parser("reject-edit"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_reject_edit)
+    s = sub.add_parser("get-onboard-prompt"); s.add_argument("--project", required=True); s.add_argument("--file"); s.add_argument("--raw", action="store_true"); s.set_defaults(fn=cmd_onboard)
+    s = sub.add_parser("heartbeat"); s.set_defaults(fn=cmd_heartbeat)
+    s = sub.add_parser("connect"); s.add_argument("--project", required=True); s.add_argument("--file", required=True); s.set_defaults(fn=cmd_connect)
+
+    args = p.parse_args()
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()

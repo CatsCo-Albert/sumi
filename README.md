@@ -67,6 +67,31 @@ WS_PORT=12345
 
 ## Connect an agent
 
+Two ways — pick based on what your agent runtime supports:
+
+### Option A: `sumi-kit` (recommended)
+
+One-shot install gives your agent a CLI plus loadable skills:
+
+```bash
+python3 sumi-kit/install.py --target-root /path/to/my-agent
+# → installs bin/sumi (Python CLI, zero deps)
+# → installs .pi/skills/sumi-{bootstrap,collab,onboard}/SKILL.md
+
+# In the agent:
+export SUMI_BASE_URL="http://localhost:3000"
+export SUMI_API_KEY="cc_..."
+sumi whoami
+sumi read-doc --project prj_x --file notes/intro.md --raw
+sumi propose-edit --project prj_x --file notes/intro.md \
+  --blocks '[{"startLine":3,"endLine":5,"updated":"…"}]'
+sumi pending-status --project prj_x
+```
+
+Works in Pi, Claude Code, Codex, Cursor, or any runner that can `exec` a script and read a SKILL.md file. See `sumi-kit/README.md`.
+
+### Option B: raw TS client
+
 ```ts
 import { connectSumi } from "sumi/agent-client";
 
