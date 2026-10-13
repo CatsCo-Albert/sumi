@@ -13,11 +13,12 @@ import { useEffect, useRef } from "react";
 import { useUiStore } from "@/stores/ui-store";
 import { validateUiPatch } from "@/src/a2ui/validate";
 import { getStoredToken } from "./use-session";
+import { apiPath } from "./api-path";
 
 export interface UseUiEventsOptions {
   /** Optional server filter; the endpoint also accepts this. */
   projectId?: string | null;
-  /** Custom SSE endpoint (defaults to /api/ui/events). */
+  /** Custom SSE endpoint (defaults to /api/ui/events, base-path aware). */
   endpoint?: string;
   /** Disable entirely (e.g. server-rendered shell). */
   enabled?: boolean;
@@ -34,7 +35,7 @@ export function useUiEvents({
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
-    const url = new URL(endpoint, window.location.origin);
+    const url = new URL(apiPath(endpoint), window.location.origin);
     if (projectId) url.searchParams.set("projectId", projectId);
     const token = getStoredToken();
     if (token) url.searchParams.set("token", token);
