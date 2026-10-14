@@ -94,7 +94,7 @@ def cmd_list_members(a: argparse.Namespace) -> None:
 
 
 def cmd_read_doc(a: argparse.Namespace) -> None:
-    r = _req("GET", f"/api/documents/content?projectId={a.project}&fileId={urllib.request.quote(a.file)}")
+    r = _req("GET", f"/api/documents/content?projectId={a.project}&filePath={urllib.request.quote(a.file)}")
     if a.raw:
         print(r.get("content", ""))
     else:
@@ -134,7 +134,9 @@ def cmd_apply_edit(a: argparse.Namespace) -> None:
 
 
 def cmd_reject_edit(a: argparse.Namespace) -> None:
-    _pp(_req("DELETE", f"/api/pending-edits?id={a.id}"))
+    # The route reads the id from the JSON body as `editId`; it ignores query
+    # params, so `?id=` reached nothing.
+    _pp(_req("DELETE", "/api/pending-edits", {"editId": a.id}))
 
 
 def cmd_page_state(a: argparse.Namespace) -> None:
@@ -468,7 +470,7 @@ def cmd_co_edit(a: argparse.Namespace) -> None:
         try:
             r = _req(
                 "GET",
-                f"/api/documents/content?projectId={project}&fileId={urllib.request.quote(file_id)}",
+                f"/api/documents/content?projectId={project}&filePath={urllib.request.quote(file_id)}",
             )
             return r.get("contentHash") or hashlib.sha256(
                 r.get("content", "").encode()
@@ -480,7 +482,7 @@ def cmd_co_edit(a: argparse.Namespace) -> None:
         try:
             r = _req(
                 "GET",
-                f"/api/documents/content?projectId={project}&fileId={urllib.request.quote(file_id)}",
+                f"/api/documents/content?projectId={project}&filePath={urllib.request.quote(file_id)}",
             )
             return r.get("content")
         except Exception:

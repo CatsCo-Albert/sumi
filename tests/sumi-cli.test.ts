@@ -13,7 +13,7 @@ const CLI_PATHS = {
   listProjects: "/api/projects",
   listDocs: (p: string) => `/api/projects/${p}/documents`,
   listMembers: (p: string) => `/api/projects/${p}/members`,
-  readDoc: (p: string, f: string) => `/api/documents/content?projectId=${p}&fileId=${f}`,
+  readDoc: (p: string, f: string) => `/api/documents/content?projectId=${p}&filePath=${f}`,
   proposeEdit: "/api/pending-edits",
   listPending: (p: string) => `/api/pending-edits?projectId=${p}`,
   applyEdit: "/api/edits/apply",
@@ -49,6 +49,68 @@ describe("sumi-cli paths", () => {
           );
         })();
       expect(exists, `${name} -> ${urlPath} has no route.ts`).toBe(true);
+    }
+  });
+});
+
+/**
+ * The table above is hand-written, so it can mirror a CLI bug instead of
+ * catching it: `readDoc` sent `fileId=` where the route reads `filePath=`, and
+ * the expectation said `fileId=` too, so CI stayed green while `sumi read-doc`
+ * returned 400 in practice.
+ *
+ * This one reads both sources and compares them, so the CLI and the route have
+ * to agree on the parameter names themselves.
+ */
+describe("sumi-cli query params match what the routes read", () => {
+  const fs = require("fs");
+  const path = require("path");
+
+  function cliParamsFor(urlFragment: string): Set<string> {
+    const cli = fs.readFileSync(
+      path.join(process.cwd(), "sumi-kit/cli/sumi"),
+      "utf8"
+    );
+    const found = new Set<string>();
+    const urls = new RegExp(`\\${urlFragment}\\?([^\`"]*)`, "g");
+    for (const m of cli.matchAll(urls)) {
+      for (const kv of m[1].matchAll(/([A-Za-z_][A-Za-z0-9_]*)=/g)) {
+        found.add(kv[1]);
+      }
+    }
+    return found;
+  }
+
+  function routeParamsFor(routeFile: string): Set<string> {
+    const src = fs.readFileSync(path.join(process.cwd(), routeFile), "utf8");
+    const found = new Set<string>();
+    for (const m of src.matchAll(/searchParams\.get\("([^"]+)"\)/g)) {
+      found.add(m[1]);
+    }
+    return found;
+  }
+
+  it("document content", () => {
+    const cli = cliParamsFor("/api/documents/content");
+    const route = routeParamsFor("app/api/documents/content/route.ts");
+    expect(cli.size).toBeGreaterThan(0);
+    for (const p of cli) {
+      expect(
+        route.has(p),
+        `CLI sends ?${p}= but the route reads: ${[...route].join(", ")}`
+      ).toBe(true);
+    }
+  });
+
+  it("pending edits", () => {
+    const cli = cliParamsFor("/api/pending-edits");
+    const route = routeParamsFor("app/api/pending-edits/route.ts");
+    expect(cli.size).toBeGreaterThan(0);
+    for (const p of cli) {
+      expect(
+        route.has(p),
+        `CLI sends ?${p}= but the route reads: ${[...route].join(", ")}`
+      ).toBe(true);
     }
   });
 });
