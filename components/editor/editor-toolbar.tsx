@@ -20,6 +20,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { apiPath } from "@/lib/api-path";
 import { EditorView } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
 import { cn } from "@/lib/utils";
@@ -450,7 +451,7 @@ export function EditorToolbar({
     if (!view) return;
     setUploading(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/assets`, {
+      const res = await fetch(apiPath(`/api/projects/${projectId}/assets`), {
         method: "POST",
         headers: {
           ...getAuthHeaders(),

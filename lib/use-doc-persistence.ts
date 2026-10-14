@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { apiPath } from "./api-path";
 import { getAuthHeaders } from "@/lib/use-session";
 import { loadSettings } from "@/components/settings-dialog";
 import { useUiStore } from "@/stores/ui-store";
@@ -71,7 +72,7 @@ export function useDocPersistence(
         skipNextAutoVersion.current = false;
         return;
       }
-      void fetch(`/api/projects/${projectId}/versions`, {
+      void fetch(apiPath(`/api/projects/${projectId}/versions`), {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ fileId, source: "auto", content }),

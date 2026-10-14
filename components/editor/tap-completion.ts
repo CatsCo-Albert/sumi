@@ -20,6 +20,7 @@ import {
   WidgetType,
   keymap,
 } from "@codemirror/view";
+import { apiPath } from "@/lib/api-path";
 import {
   StateField,
   StateEffect,
@@ -308,7 +309,7 @@ class TapRequester {
     const suffix = docText.slice(cursorPos, cursorPos + SUFFIX_CHARS);
 
     try {
-      const res = await fetch("/api/tap", {
+      const res = await fetch(apiPath("/api/tap"), {
         method: "POST",
         headers: {
           ...getAuthHeaders(),

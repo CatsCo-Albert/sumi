@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { apiPath } from "@/lib/api-path";
 import { useRouter } from "next/navigation";
 import { getAuthHeaders } from "@/lib/use-session";
 import { toast } from "@/components/ui/toast";
@@ -55,6 +56,25 @@ interface AgentSetup {
   roomName: string;
   instructions: string;
   envBlock: string;
+}
+
+/**
+ * Open a document with a full navigation rather than the client router.
+ *
+ * Two gateway behaviours make client-side navigation unusable here, and both
+ * were observed live:
+ *   - `router.push("/?doc=…")` under basePath produces `/sumi?doc=…` (no
+ *     trailing slash). The deployment's CSP allows `…/sumi/`, so Next's RSC
+ *     fetch for that URL is refused and the router falls back to a page load.
+ *   - The same slashless URL is also redirected by the gateway to `/sumi/`,
+ *     which drops the query string — so the document never arrives and the
+ *     workspace re-renders the list.
+ *
+ * Navigating to the explicitly slashed path avoids both: the query survives,
+ * and the server sends the editor back.
+ */
+function openDocument(id: string): void {
+  window.location.assign(apiPath(`/?doc=${encodeURIComponent(id)}`));
 }
 
 export default function DocumentListPane() {
@@ -109,11 +129,11 @@ export default function DocumentListPane() {
 
   // Load projects + whoami on mount
   useEffect(() => {
-    fetch("/api/projects", { headers: getAuthHeaders() })
+    fetch(apiPath("/api/projects"), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { projects: [] }))
       .then((d) => setProjects(d.projects || []))
       .catch(() => setProjects([]));
-    fetch("/api/auth/me", { headers: getAuthHeaders() })
+    fetch(apiPath("/api/auth/me"), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.actor?.id) setSessionSubjectId(d.actor.id);
@@ -128,7 +148,7 @@ export default function DocumentListPane() {
       return;
     }
     setLoadingDocs(true);
-    fetch(`/api/projects/${selected.id}/documents`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${selected.id}/documents`), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { documents: [] }))
       .then((d) => setDocuments(d.documents || []))
       .catch(() => setDocuments([]))
@@ -140,14 +160,14 @@ export default function DocumentListPane() {
   // Load members when the members panel opens
   useEffect(() => {
     if (!selected || !showMembers) return;
-    fetch(`/api/projects/${selected.id}/members`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${selected.id}/members`), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { members: [] }))
       .then((d) => setMembers(d.members || []))
       .catch(() => setMembers([]));
 
     // Also load contacts (friends + bots) so the picker can render.
     setContactsLoading(true);
-    fetch("/api/friends", { headers: getAuthHeaders() })
+    fetch(apiPath("/api/friends"), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { users: [], agents: [] }))
       .then((d) => setContacts([...(d.users ?? []), ...(d.agents ?? [])]))
       .catch(() => setContacts([]))
@@ -173,7 +193,7 @@ export default function DocumentListPane() {
   const createProject = () => withBusy("create-project", async () => {
     if (!newProjectName.trim()) return;
     setError(null);
-    const res = await fetch("/api/projects", {
+    const res = await fetch(apiPath("/api/projects"), {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ name: newProjectName.trim() }),
@@ -194,7 +214,7 @@ export default function DocumentListPane() {
 
   const deleteProject = () => withBusy("delete-project", async () => {
     if (!selected) return;
-    const res = await fetch(`/api/projects/${selected.id}`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}`), {
       method: "DELETE",
       headers: getAuthHeaders(),
     });
@@ -217,7 +237,7 @@ export default function DocumentListPane() {
     id: string,
     body: Record<string, unknown>
   ): Promise<Project | null> => {
-    const res = await fetch(`/api/projects/${id}`, {
+    const res = await fetch(apiPath(`/api/projects/${id}`), {
       method: "PATCH",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -289,7 +309,7 @@ export default function DocumentListPane() {
     if (busyActions.has(key)) return false;
     setBusyActions((s) => new Set(s).add(key));
     try {
-      const res = await fetch(`/api/projects/${id}`, {
+      const res = await fetch(apiPath(`/api/projects/${id}`), {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
@@ -335,7 +355,7 @@ export default function DocumentListPane() {
   const createDocument = () => withBusy("create-doc", async () => {
     if (!selected || !newFileId.trim()) return;
     setError(null);
-    const res = await fetch(`/api/projects/${selected.id}/documents`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/documents`), {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -354,12 +374,12 @@ export default function DocumentListPane() {
     setNewTitle("");
     setShowNewDoc(false);
     toast({ title: "文档已创建", description: document.fileId, variant: "success" });
-    router.push(`/?doc=${document.id}`);
+    openDocument(document.id);
   });
 
   const deleteDocument = async (doc: Document) => {
     if (!selected) return;
-    const res = await fetch(`/api/projects/${selected.id}/documents`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/documents`), {
       method: "DELETE",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ fileId: doc.fileId }),
@@ -396,7 +416,7 @@ export default function DocumentListPane() {
       if (!selected || docs.length === 0) return;
       const results = await Promise.all(
         docs.map((doc) =>
-          fetch(`/api/projects/${selected.id}/documents`, {
+          fetch(apiPath(`/api/projects/${selected.id}/documents`), {
             method: "PATCH",
             headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -425,7 +445,7 @@ export default function DocumentListPane() {
       if (!selected || docs.length === 0) return;
       const results = await Promise.all(
         docs.map((doc) =>
-          fetch(`/api/projects/${selected.id}/documents`, {
+          fetch(apiPath(`/api/projects/${selected.id}/documents`), {
             method: "DELETE",
             headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
             body: JSON.stringify({ fileId: doc.fileId }),
@@ -449,7 +469,7 @@ export default function DocumentListPane() {
     if (!selected || !renamingDoc) return;
     const doc = documents.find((d) => d.id === renamingDoc);
     if (!doc) return;
-    const res = await fetch(`/api/projects/${selected.id}/documents`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/documents`), {
       method: "PATCH",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -477,7 +497,7 @@ export default function DocumentListPane() {
     const subjectId = subjectIdOverride ?? newMemberId.trim();
     if (!subjectId) return;
     setError(null);
-    const res = await fetch(`/api/projects/${selected.id}/members`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/members`), {
       method: "POST",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -493,7 +513,7 @@ export default function DocumentListPane() {
     }
     setNewMemberId("");
     // Refresh list, and if it was an agent — auto-open the onboarding card
-    fetch(`/api/projects/${selected.id}/members`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${selected.id}/members`), { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => setMembers(d.members || []));
     if (subjectId.startsWith("a")) {
@@ -508,7 +528,7 @@ export default function DocumentListPane() {
 
   const removeMember = async (subjectId: string) => {
     if (!selected) return;
-    const res = await fetch(`/api/projects/${selected.id}/members`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/members`), {
       method: "DELETE",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ subjectId }),
@@ -529,7 +549,7 @@ export default function DocumentListPane() {
   const toggleAgentStatus = async (subjectId: string, currentStatus: string | null) => {
     if (!selected) return;
     const next = currentStatus === "disabled" ? "active" : "disabled";
-    const res = await fetch(`/api/projects/${selected.id}/members`, {
+    const res = await fetch(apiPath(`/api/projects/${selected.id}/members`), {
       method: "PATCH",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ subjectId, status: next }),
@@ -586,7 +606,7 @@ export default function DocumentListPane() {
   };
 
   const openDoc = (doc: Document) => {
-    router.push(`/?doc=${doc.id}`);
+    openDocument(doc.id);
   };
 
   return (

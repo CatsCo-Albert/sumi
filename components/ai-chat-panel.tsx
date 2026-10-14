@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { apiPath } from "@/lib/api-path";
 import { cn } from "@/lib/utils";
 import { getAuthHeaders } from "@/lib/use-session";
 import { useIntentStore } from "@/stores/intent-store";
@@ -127,7 +128,7 @@ export function AiChatPanel({
     }
     let cancelled = false;
     setLoading(true);
-    const url = new URL("/api/intents", window.location.origin);
+    const url = new URL(apiPath("/api/intents"), window.location.origin);
     url.searchParams.set("projectId", projectId);
     if (fileId) url.searchParams.set("fileId", fileId);
     fetch(url.toString(), { headers: getAuthHeaders() })
@@ -148,7 +149,7 @@ export function AiChatPanel({
   useEffect(() => {
     if (!open || !projectId) return;
     let cancelled = false;
-    fetch(`/api/projects/${projectId}/members`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${projectId}/members`), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { members: [] }))
       .then((d) => {
         if (cancelled) return;
@@ -200,7 +201,7 @@ export function AiChatPanel({
   }, [lastId]);
 
   const closeIntent = async (id: string) => {
-    const res = await fetch("/api/intents", {
+    const res = await fetch(apiPath("/api/intents"), {
       method: "PATCH",
       headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ id, status: "closed" }),
@@ -502,7 +503,7 @@ function Composer({
       };
       if (targetAgent) body.targetAgentId = targetAgent;
       if (followUp?.threadId) body.threadId = followUp.threadId;
-      const res = await fetch("/api/intents", {
+      const res = await fetch(apiPath("/api/intents"), {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(body),
