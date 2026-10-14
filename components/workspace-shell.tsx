@@ -20,6 +20,7 @@ import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
 import { EditorToolbar } from "@/components/editor/editor-toolbar";
 import OutlineSidebar from "@/components/editor/outline-sidebar";
+import VersionHistory from "@/components/editor/version-history";
 import { AskAgentDialog } from "@/components/ask-agent-dialog";
 import { AiChatPanel } from "@/components/ai-chat-panel";
 import EditCommandBar from "@/components/editor/edit-command-bar";
@@ -144,7 +145,7 @@ function EditorPane({
   const [currentContent, setCurrentContent] = useState("");
   const [cursorLine, setCursorLine] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<"outline" | "members">("outline");
+  const [sidebarTab, setSidebarTab] = useState<"outline" | "members" | "history">("outline");
   const [askOpen, setAskOpen] = useState(false);
   const [askSelection, setAskSelection] = useState<{
     text: string;
@@ -176,7 +177,7 @@ function EditorPane({
   useEffect(() => {
     try {
       const v = localStorage.getItem(`sumi:sidebar:${projectId}`);
-      if (v === "outline" || v === "members") {
+      if (v === "outline" || v === "members" || v === "history") {
         setSidebarOpen(true);
         setSidebarTab(v);
       } else if (v === "closed") {
@@ -187,7 +188,7 @@ function EditorPane({
     }
   }, [projectId]);
 
-  const toggleSidebar = (tab?: "outline" | "members") => {
+  const toggleSidebar = (tab?: "outline" | "members" | "history") => {
     const next = tab
       ? !(sidebarOpen && sidebarTab === tab)
       : !sidebarOpen;
@@ -431,6 +432,8 @@ function EditorPane({
                 content={currentContent || initialContent || ""}
                 cursorLine={cursorLine}
                 collaborators={collaborators}
+                projectId={projectId}
+                fileId={fileId}
               />
             )}
           </div>
@@ -463,6 +466,8 @@ function EditorPane({
                 content={currentContent || initialContent || ""}
                 cursorLine={cursorLine}
                 collaborators={collaborators}
+                projectId={projectId}
+                fileId={fileId}
               />
             )}
           </div>
@@ -497,20 +502,24 @@ function SidePanel({
   content,
   cursorLine,
   collaborators,
+  projectId,
+  fileId,
 }: {
-  tab: "outline" | "members";
-  setTab: (t: "outline" | "members") => void;
+  tab: "outline" | "members" | "history";
+  setTab: (t: "outline" | "members" | "history") => void;
   onClose: () => void;
   view: EditorView | null;
   content: string;
   cursorLine: number | null;
   collaborators: Array<{ name: string; color: string; id?: string }>;
+  projectId: string;
+  fileId: string;
 }) {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-l border-border/60 bg-background">
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div className="flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
-          {(["outline", "members"] as const).map((t) => (
+          {(["outline", "members", "history"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -521,7 +530,7 @@ function SidePanel({
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {t === "outline" ? "大纲" : "成员"}
+              {t === "outline" ? "大纲" : t === "members" ? "成员" : "历史"}
             </button>
           ))}
         </div>
@@ -538,6 +547,13 @@ function SidePanel({
           view={view}
           content={content}
           cursorLine={cursorLine}
+          className="flex-1"
+        />
+      ) : tab === "history" ? (
+        <VersionHistory
+          projectId={projectId}
+          fileId={fileId}
+          currentContent={content}
           className="flex-1"
         />
       ) : (

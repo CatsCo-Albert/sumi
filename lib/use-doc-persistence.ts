@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { getAuthHeaders } from "@/lib/use-session";
+import { useUiStore } from "@/stores/ui-store";
 
 const AUTOSAVE_DEBOUNCE_MS = 2_000;
 const SAVE_ENDPOINT = "/api/documents/content";
@@ -46,6 +47,40 @@ export function useDocPersistence(
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContent = useRef<string | null>(null);
   const contentHash = useRef<string | null>(null);
+  /** Set when a doc_restored patch lands — the restored content flows through
+   *  the editor via Yjs and triggers a save; that save must NOT re-snapshot
+   *  (the server already wrote a restore-safety version). */
+  const skipNextAutoVersion = useRef(false);
+
+  // Live-restore signal — when another client restores a version, the Yjs
+  // doc updates and scheduleSave fires; suppress the follow-up auto-version.
+  const lastRestore = useUiStore((s) => s.lastRestore);
+  useEffect(() => {
+    if (!lastRestore) return;
+    if (lastRestore.documentId === `${projectId}-${fileId}`) {
+      skipNextAutoVersion.current = true;
+    }
+  }, [lastRestore, projectId, fileId]);
+
+  /** Fire-and-forget auto-version POST — the server decides whether the
+   *  snapshot actually lands (debounce rules live in the route). */
+  const triggerAutoVersion = useCallback(
+    (content: string) => {
+      if (!projectId || !fileId) return;
+      if (skipNextAutoVersion.current) {
+        skipNextAutoVersion.current = false;
+        return;
+      }
+      void fetch(`/api/projects/${projectId}/versions`, {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId, source: "auto", content }),
+      }).catch(() => {
+        // best-effort — version history must never break the save path
+      });
+    },
+    [projectId, fileId]
+  );
 
   // Load canonical content + hash once
   useEffect(() => {
@@ -117,6 +152,7 @@ export function useDocPersistence(
         setLastSavedAt(Date.now());
         setError(null);
         setConflicted(false);
+        triggerAutoVersion(content);
       } else if (res.status === 409) {
         setConflicted(true);
         setError("内容冲突 — 稍后重试");
@@ -126,7 +162,7 @@ export function useDocPersistence(
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [projectId, fileId]);
+  }, [projectId, fileId, triggerAutoVersion]);
 
   const scheduleSave = useCallback(
     (content: string) => {

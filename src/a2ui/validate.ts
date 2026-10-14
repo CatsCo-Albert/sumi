@@ -53,6 +53,12 @@ const uiPatchSchema = z.union([
     intent: z.unknown().optional(),
     intentId: z.string().optional(),
   }),
+  z.object({
+    type: z.literal("doc_restored"),
+    projectId: z.string().min(1),
+    fileId: z.string().min(1),
+    versionId: z.string().min(1),
+  }),
   z.object({ type: z.literal("noop") }),
 ]);
 
