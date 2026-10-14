@@ -37,6 +37,7 @@ import { useDocPersistence } from "@/lib/use-doc-persistence";
 export default function WorkspaceShell() {
   const searchParams = useSearchParams();
   const documentId = searchParams.get("doc");
+  const inviteProjectId = searchParams.get("invite");
 
   const currentDocumentId = useUiStore((s) => s.currentDocumentId);
   const activeMainBlock = useUiStore((s) => s.activeMainBlock);
@@ -64,7 +65,29 @@ export default function WorkspaceShell() {
 
   const { actor, loading } = useSession();
 
-  // Esc → back to document list (when a doc is open; dialogs handle their own Esc)
+  // Invite link — ?invite=prj_x means "auto-join this project as viewer".
+  // Any authenticated user can redeem; the invite route adds them
+  // and the workspace reloads to show the new membership.
+  useEffect(() => {
+    if (!inviteProjectId || !actor) return;
+    const join = async () => {
+      try {
+        await fetch(apiPath("/api/invite/redeem"), {
+          method: "POST",
+          headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: inviteProjectId }),
+        });
+      } catch {
+        /* already a member or invite failed — still try to open */
+      }
+      // Clean the URL + reload to pick up the new membership
+      const url = new URL(window.location.href);
+      url.searchParams.delete("invite");
+      window.history.replaceState(null, "", url.toString());
+      window.location.reload();
+    };
+    void join();
+  }, [inviteProjectId, actor]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && currentDocumentId) {
@@ -812,6 +835,23 @@ function SidePanel({
           )}
         </ul>
       )}
+
+      {/* Invite link — copy it, send to friend/agent */}
+      <div className="border-t border-border/40 px-3 py-2">
+        <button
+          onClick={() => {
+            const url = `${window.location.origin}/?invite=${projectId}`;
+            void navigator.clipboard.writeText(url);
+          }}
+          className="w-full rounded-md border border-border/60 px-2 py-1 text-[10px] font-medium text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+          title="复制邀请链接"
+        >
+          ＋ 复制邀请链接
+        </button>
+        <div className="mt-1 text-[9px] text-muted-foreground/50">
+          好友点链接 → 自动加入项目
+        </div>
+      </div>
     </aside>
   );
 }
