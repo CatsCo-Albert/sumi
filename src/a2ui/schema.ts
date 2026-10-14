@@ -60,6 +60,20 @@ export type UiPatch =
       intent?: unknown;
       intentId?: string;
     }
+  | {
+      /** Shadow doc 生命周期 —— created/updated/promoted/discarded。
+       *  `shadow` 是完整行；promoted 时另带 promotion 产生的 pending_edits。 */
+      type:
+        | "shadow_doc_created"
+        | "shadow_doc_updated"
+        | "shadow_doc_promoted"
+        | "shadow_doc_discarded";
+      projectId: string;
+      fileId: string;
+      shadow?: unknown;
+      shadowId?: string;
+      edits?: unknown[];
+    }
   | { type: "noop" };
 
 // ---------------------------------------------------------------------------

@@ -75,6 +75,27 @@ sumi list-members --project prj_x
 
 Look for other `a*` subjects — those are agents like you. `u*` subjects are humans.
 
+## Shadow drafts —— 私密草稿区
+
+Shadow docs let you iterate privately **before** anything becomes a pending edit. Nothing lands in the doc, nothing enters Yjs, no locks — just a scratch area keyed to `(project, file, you)`.
+
+```bash
+sumi shadows --project prj_x                          # everyone's drafts in the project
+sumi shadows --project prj_x --mine                   # only yours
+sumi shadow-create --project prj_x --file notes/intro.md \
+  --from-file /tmp/draft.md --title "formal rewrite v1"
+echo "draft text" | sumi shadow-create --project prj_x --file notes/intro.md
+sumi shadow-promote --id shadow_xxx                   # → pending_edit for human review
+sumi shadow-discard --id shadow_xxx                   # drop it
+```
+
+Use shadows when:
+- **Comparing variants** — create 2-3 shadows, read them back, promote only the best
+- **Multi-step work** — draft intermediate results; promote one final proposal instead of spamming the review queue
+- **Answering an intent** — put the draft in shadow, reply with the shadow id, promote after feedback
+
+Promotion diffs the shadow against the doc snapshot (or current file) and creates block-level pending edits — the human sees the same Keep/Reject inline diff as a normal `propose-edit`. `status` moves `draft → promoted` (or `discarded`).
+
 ## RelPos anchors (why propose-edit is safe)
 
 When you propose `{startLine:3, endLine:5}`, Sumi converts those to `RelativePosition` — CRDT-stable IDs that track text even if lines shift above. If a human types a paragraph at the top before approving, your edit still lands on the right block. You never need to re-fetch-and-recompute.

@@ -159,6 +159,30 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         ON intents(target_agent_id, status);
     `,
   },
+  {
+    version: 7,
+    sql: `
+      -- Shadow docs —— agent 的私密草稿区。
+      -- 不渲染进编辑器、不进 Yjs；agent 迭代满意后 promote 成 pending_edit
+      -- 走人工审核。owner 是创建它的 subject（通常 a*）。
+      CREATE TABLE IF NOT EXISTS shadow_docs (
+        id               TEXT PRIMARY KEY,          -- "shadow_<ts>_<rand>"
+        project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        file_id          TEXT NOT NULL,
+        owner_id         TEXT NOT NULL,             -- 创建它的 subject
+        title            TEXT,                      -- 短标签，如 "formal rewrite v1"
+        content          TEXT NOT NULL,             -- 草稿 markdown
+        base_doc_hash    TEXT,                      -- 创建时文档 hash（漂移检测）
+        status           TEXT NOT NULL CHECK (status IN ('draft','promoted','discarded'))
+                         DEFAULT 'draft',
+        promoted_edit_id TEXT,                      -- promote 后 → pending_edit.id
+        created_at       INTEGER NOT NULL,
+        updated_at       INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_shadow_scope
+        ON shadow_docs(project_id, file_id, owner_id, status);
+    `,
+  },
 ];
 
 export async function getDb(): Promise<DatabaseSync> {
