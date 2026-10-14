@@ -137,6 +137,28 @@ def cmd_reject_edit(a: argparse.Namespace) -> None:
     _pp(_req("DELETE", f"/api/pending-edits?id={a.id}"))
 
 
+def cmd_page_state(a: argparse.Namespace) -> None:
+    """Aggregate pageState from all clients across the project's rooms.
+
+    Hits the WS server's admin surface (awareness lives there), not Next.js.
+    SUMI_WS_URL is converted ws:// → http:// for the HTTP endpoint.
+    """
+    ws_url = _env("SUMI_WS_URL", "ws://localhost:12345")
+    http_base = ws_url.replace("ws://", "http://").replace("wss://", "https://").rstrip("/")
+    url = f"{http_base}/page-state/{urllib.request.quote(a.project)}"
+    req = urllib.request.Request(url, method="GET")
+    key = _env("CATSCO_API_KEY") or _env("SUMI_API_KEY")
+    if key:
+        req.add_header("Authorization", f"ApiKey {key}")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            _pp(json.loads(r.read().decode("utf-8")))
+    except urllib.error.HTTPError as e:
+        _pp({"error": f"HTTP {e.code}", "body": e.read().decode("utf-8", "replace")})
+    except Exception as e:
+        _pp({"error": str(e)})
+
+
 def cmd_onboard(a: argparse.Namespace) -> None:
     params = f"fileId={urllib.request.quote(a.file)}" if a.file else ""
     r = _req("GET", f"/api/projects/{a.project}/agent-setup?{params}")
@@ -394,6 +416,7 @@ def main() -> None:
     s = sub.add_parser("propose-edit"); s.add_argument("--project", required=True); s.add_argument("--file", required=True); s.add_argument("--blocks", required=True); s.add_argument("--desc"); s.set_defaults(fn=cmd_propose_edit)
     s = sub.add_parser("list-pending"); s.add_argument("--project", required=True); s.set_defaults(fn=cmd_list_pending)
     s = sub.add_parser("pending-status"); s.add_argument("--project", required=True); s.set_defaults(fn=cmd_pending_status)
+    s = sub.add_parser("page-state"); s.add_argument("--project", required=True); s.set_defaults(fn=cmd_page_state)
     s = sub.add_parser("apply-edit"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_apply_edit)
     s = sub.add_parser("reject-edit"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_reject_edit)
     s = sub.add_parser("get-onboard-prompt"); s.add_argument("--project", required=True); s.add_argument("--file"); s.add_argument("--raw", action="store_true"); s.set_defaults(fn=cmd_onboard)

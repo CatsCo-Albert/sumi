@@ -71,6 +71,7 @@ import {
 import { tapExtension } from "./tap-completion";
 import { wrapSelectionWith } from "./format-helpers";
 import { useEditStore } from "@/stores/edit-store";
+import { registerProvider } from "@/lib/provider-registry";
 
 export type EditorMode = "markdown" | "html";
 
@@ -213,6 +214,7 @@ export default function CollaborativeEditor({
       params: token ? { token } : {},
     });
     providerRef.current = provider;
+    const unregister = registerProvider(roomName, provider);
 
     // Offline persistence — IndexedDB mirror of the Yjs doc. Even if the WS
     // is unreachable, edits land in local storage and sync up on reconnect.
@@ -462,6 +464,7 @@ export default function CollaborativeEditor({
         stale.forEach((k) => locksMap.delete(k));
       });
       view.destroy();
+      unregister();
       provider.awareness.off("change", updateCollaborators);
       provider.destroy();
       idbPersistence?.destroy();

@@ -183,6 +183,7 @@ export async function GET(
     `| 新建文档 | \`POST /api/projects/${projectId}/documents { fileId, title }\` |`,
     `| 上传图片 | \`POST /api/projects/${projectId}/assets\` (binary body, \`x-file-name\` header) |`,
     `| 文档元数据 | \`GET /api/documents/content?projectId&filePath\` → \`{ content, contentHash }\` |`,
+    `| 页面状态 | \`GET ${wsBaseUrl.replace("ws://", "http://").replace("wss://", "https://")}/page-state/${projectId}\` — 谁在看什么文档、哪个面板开着 |`,
     ``,
     `## 富文本回答 — json-render Spec`,
     ``,

@@ -670,6 +670,38 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // -- GET /page-state/:projectId — aggregate all clients' pageState across docs
+  const pageStateMatch = url.match(/^\/page-state\/([^/]+)$/);
+  if (req.method === "GET" && pageStateMatch) {
+    const [, projectId] = pageStateMatch;
+    const members: Array<{
+      clientId: number;
+      roomName: string;
+      fileId: string;
+      user: { id?: string; name?: string; image?: string } | null;
+      pageState: unknown;
+    }> = [];
+    docs.forEach((docData, roomName) => {
+      if (!roomName.startsWith(`${projectId}-`)) return;
+      const fileId = roomName.slice(projectId.length + 1);
+      const states = docData.awareness.getStates();
+      states.forEach((state, clientId) => {
+        const user = state.user as { id?: string; name?: string; image?: string } | undefined;
+        if (state.pageState) {
+          members.push({
+            clientId,
+            roomName,
+            fileId,
+            user: user || null,
+            pageState: state.pageState,
+          });
+        }
+      });
+    });
+    sendJson(res, 200, { projectId, members });
+    return;
+  }
+
   // -- GET /rooms ------------------------------------------------------------
   if (req.method === "GET" && url === "/rooms") {
     sendJson(res, 200, {

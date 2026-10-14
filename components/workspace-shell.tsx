@@ -16,6 +16,7 @@ import { EditorView } from "@codemirror/view";
 import { useSession, getAuthHeaders } from "@/lib/use-session";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
+import { broadcastPageState } from "@/lib/provider-registry";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
 import { EditorToolbar } from "@/components/editor/editor-toolbar";
@@ -52,6 +53,17 @@ export default function WorkspaceShell() {
   useEffect(() => {
     setCurrentDocumentId(documentId);
   }, [documentId, setCurrentDocumentId]);
+
+  // Broadcast page state to all active Yjs providers so other clients
+  // (humans + agents) can see where we are. Runs on every UI change.
+  useEffect(() => {
+    broadcastPageState({
+      currentDocumentId,
+      activeMainBlock,
+      panelVisibility,
+      panelWidth,
+    });
+  }, [currentDocumentId, activeMainBlock, panelVisibility, panelWidth]);
 
   // Flash the attention target briefly, then clear
   useEffect(() => {
