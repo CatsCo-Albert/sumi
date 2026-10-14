@@ -42,6 +42,31 @@ describe("parseRoomName", () => {
     const r = parseRoomName("ws/b140ffee-1a2b-3c4d-8e9f-0123456789ab-x.md");
     expect(r?.fileId).toBe("x.md");
   });
+  it("keeps a prj_ project id intact when the file id has hyphens", () => {
+    const r = parseRoomName("prj_a1b2c3d4e5f6a1b2c3d4e5f6-my-notes.md");
+    expect(r).toEqual({
+      projectId: "prj_a1b2c3d4e5f6a1b2c3d4e5f6",
+      fileId: "my-notes.md",
+    });
+  });
+  it("keeps a prj_ project id intact for nested file paths", () => {
+    const r = parseRoomName("prj_a1b2c3d4e5f6a1b2c3d4e5f6-docs/api-guide.md");
+    expect(r).toEqual({
+      projectId: "prj_a1b2c3d4e5f6a1b2c3d4e5f6",
+      fileId: "docs/api-guide.md",
+    });
+  });
+  it("keeps a hyphenated file id under a uuid project", () => {
+    const r = parseRoomName("b140ffee-1a2b-3c4d-8e9f-0123456789ab-a-b-c.md");
+    expect(r).toEqual({
+      projectId: "b140ffee-1a2b-3c4d-8e9f-0123456789ab",
+      fileId: "a-b-c.md",
+    });
+  });
+  it("falls back for hand-made project ids without hyphens", () => {
+    const r = parseRoomName("myproject-notes.md");
+    expect(r).toEqual({ projectId: "myproject", fileId: "notes.md" });
+  });
   it("rejects chat- and project- rooms", () => {
     expect(parseRoomName("chat-abc")).toBeNull();
     expect(parseRoomName("project-abc")).toBeNull();
