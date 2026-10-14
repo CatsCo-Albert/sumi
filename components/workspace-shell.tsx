@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
+import OutlineSidebar from "@/components/editor/outline-sidebar";
 import { AskAgentDialog } from "@/components/ask-agent-dialog";
 import EditCommandBar from "@/components/editor/edit-command-bar";
 import { useEditStore } from "@/stores/edit-store";
@@ -135,6 +136,9 @@ function EditorPane({
   const [viewMode, setViewMode] = useState<EditorViewMode>("source");
   const [tapEnabled, setTapEnabled] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
+  const [cursorLine, setCursorLine] = useState<number | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"outline" | "members">("outline");
   const [askOpen, setAskOpen] = useState(false);
   const [askSelection, setAskSelection] = useState<{
     text: string;
@@ -152,6 +156,38 @@ function EditorPane({
   const handleContentChange = (content: string) => {
     setCurrentContent(content);
     scheduleSave(content);
+  };
+
+  // Right sidebar (大纲/成员) — persisted per project
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(`sumi:sidebar:${projectId}`);
+      if (v === "outline" || v === "members") {
+        setSidebarOpen(true);
+        setSidebarTab(v);
+      } else if (v === "closed") {
+        setSidebarOpen(false);
+      }
+    } catch {
+      /* private mode */
+    }
+  }, [projectId]);
+
+  const toggleSidebar = (tab?: "outline" | "members") => {
+    const next = tab
+      ? !(sidebarOpen && sidebarTab === tab)
+      : !sidebarOpen;
+    const nextTab = tab ?? sidebarTab;
+    setSidebarOpen(next);
+    if (tab) setSidebarTab(tab);
+    try {
+      localStorage.setItem(
+        `sumi:sidebar:${projectId}`,
+        next ? nextTab : "closed"
+      );
+    } catch {
+      /* private mode */
+    }
   };
 
   // Load agent members for the ask-agent dialog target picker.
@@ -300,6 +336,19 @@ function EditorPane({
               TAP
             </button>
           )}
+          {/* 大纲/成员 sidebar toggle */}
+          <button
+            onClick={() => toggleSidebar()}
+            title="大纲 / 成员"
+            className={cn(
+              "rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+              sidebarOpen
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border/60 text-muted-foreground/70 hover:text-foreground"
+            )}
+          >
+            大纲
+          </button>
           {collaborators.length > 1 && (
             <div className="flex items-center -space-x-1.5">
               {collaborators.slice(0, 5).map((c, i) => (
@@ -343,6 +392,7 @@ function EditorPane({
                 tapEnabled={tapEnabled}
                 onContentChange={handleContentChange}
                 onCollaboratorsChange={setCollaborators}
+                onCursorLineChange={setCursorLine}
                 onEditorReady={(v) => (editorViewRef.current = v)}
                 onAskAgent={handleAskAgent}
               />
@@ -350,22 +400,49 @@ function EditorPane({
             <div className="flex-1 overflow-auto bg-background">
               <MarkdownPreview content={currentContent || initialContent || ""} />
             </div>
+            {sidebarOpen && (
+              <SidePanel
+                tab={sidebarTab}
+                setTab={setSidebarTab}
+                onClose={() => toggleSidebar()}
+                view={editorViewRef.current}
+                content={currentContent || initialContent || ""}
+                cursorLine={cursorLine}
+                collaborators={collaborators}
+              />
+            )}
           </div>
         ) : (
-          <CollaborativeEditor
-            projectId={projectId}
-            fileId={fileId}
-            mode="markdown"
-            userId={actor.id}
-            userName={actor.name}
-            initialContent={initialContent ?? ""}
-            prefillOnConnect
-            tapEnabled={tapEnabled}
-            onContentChange={handleContentChange}
-            onCollaboratorsChange={setCollaborators}
-            onEditorReady={(v) => (editorViewRef.current = v)}
-            onAskAgent={handleAskAgent}
-          />
+          <div className="flex h-full">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <CollaborativeEditor
+                projectId={projectId}
+                fileId={fileId}
+                mode="markdown"
+                userId={actor.id}
+                userName={actor.name}
+                initialContent={initialContent ?? ""}
+                prefillOnConnect
+                tapEnabled={tapEnabled}
+                onContentChange={handleContentChange}
+                onCollaboratorsChange={setCollaborators}
+                onCursorLineChange={setCursorLine}
+                onEditorReady={(v) => (editorViewRef.current = v)}
+                onAskAgent={handleAskAgent}
+              />
+            </div>
+            {sidebarOpen && (
+              <SidePanel
+                tab={sidebarTab}
+                setTab={setSidebarTab}
+                onClose={() => toggleSidebar()}
+                view={editorViewRef.current}
+                content={currentContent || initialContent || ""}
+                cursorLine={cursorLine}
+                collaborators={collaborators}
+              />
+            )}
+          </div>
         )}
       </div>
 
@@ -380,6 +457,91 @@ function EditorPane({
         onCreated={() => {}}
       />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Right side panel — 大纲 / 成员
+// ---------------------------------------------------------------------------
+
+function SidePanel({
+  tab,
+  setTab,
+  onClose,
+  view,
+  content,
+  cursorLine,
+  collaborators,
+}: {
+  tab: "outline" | "members";
+  setTab: (t: "outline" | "members") => void;
+  onClose: () => void;
+  view: EditorView | null;
+  content: string;
+  cursorLine: number | null;
+  collaborators: Array<{ name: string; color: string; id?: string }>;
+}) {
+  return (
+    <aside className="flex w-60 shrink-0 flex-col border-l border-border/60 bg-background">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
+        <div className="flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
+          {(["outline", "members"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+                tab === t
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {t === "outline" ? "大纲" : "成员"}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          className="text-[11px] text-muted-foreground/70 hover:text-foreground"
+          title="关闭"
+        >
+          ✕
+        </button>
+      </div>
+      {tab === "outline" ? (
+        <OutlineSidebar
+          view={view}
+          content={content}
+          cursorLine={cursorLine}
+          className="flex-1"
+        />
+      ) : (
+        <ul className="flex-1 overflow-auto py-2">
+          {collaborators.length === 0 ? (
+            <li className="p-4 text-[12px] text-muted-foreground">
+              暂无在线成员
+            </li>
+          ) : (
+            collaborators.map((c, i) => (
+              <li
+                key={c.id || i}
+                className="flex items-center gap-2 px-3 py-1.5"
+              >
+                <span
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
+                  style={{ background: c.color }}
+                >
+                  {c.name.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="truncate text-[12px] text-foreground">
+                  {c.name}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </aside>
   );
 }
 

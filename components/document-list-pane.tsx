@@ -11,6 +11,8 @@ import { getAuthHeaders } from "@/lib/use-session";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import ProjectTable from "@/components/project-table";
+import FileTree from "@/components/file-tree";
+import { renameFolderPrefix } from "@/lib/file-tree";
 
 interface Project {
   id: string;
@@ -377,6 +379,71 @@ export default function DocumentListPane() {
     setRenameTitle(doc.title || "");
     setRenameFileId(doc.fileId);
   };
+
+  // --- Folder ops (folders are derived from fileId slashes) ---------------
+
+  const newDocInFolder = (folder: string | null) => {
+    setShowNewDoc(true);
+    setNewFileId(folder ? `${folder}/` : "");
+  };
+
+  const renameFolder = async (
+    oldPath: string,
+    newPath: string,
+    docs: Document[]
+  ) =>
+    withBusy(`folder-rename-${oldPath}`, async () => {
+      if (!selected || docs.length === 0) return;
+      const results = await Promise.all(
+        docs.map((doc) =>
+          fetch(`/api/projects/${selected.id}/documents`, {
+            method: "PATCH",
+            headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileId: doc.fileId,
+              newFileId: renameFolderPrefix(doc.fileId, oldPath, newPath),
+            }),
+          }).then((r) => (r.ok ? r.json() : null))
+        )
+      );
+      const ok = results.filter(Boolean).map((r) => r.document as Document);
+      const byId = new Map(ok.map((d) => [d.id, d]));
+      setDocuments((ds) => ds.map((d) => byId.get(d.id) ?? d));
+      if (ok.length === docs.length) {
+        toast({ title: "文件夹已重命名", description: newPath, variant: "success" });
+      } else {
+        toast({
+          title: "部分文档重命名失败",
+          description: `${ok.length}/${docs.length} 已更新`,
+          variant: "destructive",
+        });
+      }
+    });
+
+  const deleteFolder = async (path: string, docs: Document[]) =>
+    withBusy(`folder-delete-${path}`, async () => {
+      if (!selected || docs.length === 0) return;
+      const results = await Promise.all(
+        docs.map((doc) =>
+          fetch(`/api/projects/${selected.id}/documents`, {
+            method: "DELETE",
+            headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({ fileId: doc.fileId }),
+          }).then((r) => (r.ok ? doc.id : null))
+        )
+      );
+      const removed = new Set(results.filter(Boolean) as string[]);
+      setDocuments((ds) => ds.filter((d) => !removed.has(d.id)));
+      if (removed.size === docs.length) {
+        toast({ title: "文件夹已删除", description: path, variant: "success" });
+      } else {
+        toast({
+          title: "部分文档删除失败",
+          description: `${removed.size}/${docs.length} 已删除`,
+          variant: "destructive",
+        });
+      }
+    });
 
   const saveRename = async () => {
     if (!selected || !renamingDoc) return;
@@ -1059,47 +1126,18 @@ export default function DocumentListPane() {
                 </button>
               </div>
             ) : (
-              <ul className="divide-y divide-border/60">
-                {documents.map((doc) => (
-                  <li key={doc.id} className="group relative">
-                    <button
-                      onClick={() => openDoc(doc)}
-                      className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-accent/50"
-                    >
-                      <div>
-                        <div className="text-[13px] font-medium text-foreground">
-                          {doc.title || doc.fileId}
-                        </div>
-                        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                          {doc.fileId}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] text-muted-foreground/70">
-                          {new Date(doc.updatedAt).toLocaleDateString()}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startRename(doc);
-                          }}
-                          className="hidden text-[11px] text-muted-foreground/70 hover:text-foreground group-hover:inline"
-                          title="重命名"
-                        >
-                          重命名
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmDeleteDoc(doc.id);
-                          }}
-                          className="hidden text-[11px] text-muted-foreground/70 hover:text-destructive group-hover:inline"
-                          title="删除文档"
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </button>
+              <FileTree
+                documents={documents}
+                onSelect={openDoc}
+                onRename={startRename}
+                onDelete={(doc) => setConfirmDeleteDoc(doc.id)}
+                onNewInFolder={newDocInFolder}
+                onRenameFolder={renameFolder}
+                onDeleteFolder={deleteFolder}
+                renamingDocId={renamingDoc}
+                confirmDeleteDocId={confirmDeleteDoc}
+                renderFileDetail={(doc) => (
+                  <>
                     {renamingDoc === doc.id && (
                       <div className="border-t border-border/60 bg-accent/30 px-4 py-3">
                         <div className="space-y-2">
@@ -1155,9 +1193,9 @@ export default function DocumentListPane() {
                         </div>
                       </div>
                     )}
-                  </li>
-                ))}
-              </ul>
+                  </>
+                )}
+              />
             )}
           </>
         )}
