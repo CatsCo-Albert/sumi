@@ -158,27 +158,27 @@ export async function POST(request: Request) {
   });
 
   // --- 广播 -----------------------------------------------------------------
+  // Awaited: the response reports the promotion, so the patches must be out
+  // before it is sent. Fire-and-forget could land them after the response.
   const members = db
     .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
     .all(shadow.projectId) as { subject_id: string }[];
-  void (async () => {
-    for (const m of members) {
-      for (const edit of created) {
-        await publishUiPatch({
-          userId: m.subject_id,
+  for (const m of members) {
+    for (const edit of created) {
+      await publishUiPatch({
+        userId: m.subject_id,
+        projectId: shadow.projectId,
+        patch: {
+          type: "pending_edit_changed",
           projectId: shadow.projectId,
-          patch: {
-            type: "pending_edit_changed",
-            projectId: shadow.projectId,
-            fileId: shadow.fileId,
-            edit,
-          },
-          source: "external_agent",
-        });
-      }
+          fileId: shadow.fileId,
+          edit,
+        },
+        source: "external_agent",
+      });
     }
-  })();
-  notifyShadow(db, {
+  }
+  await notifyShadow(db, {
     type: "shadow_doc_promoted",
     projectId: shadow.projectId,
     fileId: shadow.fileId,

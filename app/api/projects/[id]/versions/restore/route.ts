@@ -59,24 +59,25 @@ export async function POST(
   await pushDocContent(projectId, fileId, version.content);
 
   // 3) 广播 doc_restored —— 客户端的持久化层据此跳过自动版本 + 刷新历史列表
+  // Awaited: the response reports the restore, so the patch must be out before
+  // it is sent. Fire-and-forget could land it after the response, and the
+  // persistence layer would then auto-version a restore it should have skipped.
   const members = db
     .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
     .all(projectId) as { subject_id: string }[];
-  void (async () => {
-    for (const m of members) {
-      await publishUiPatch({
-        userId: m.subject_id,
+  for (const m of members) {
+    await publishUiPatch({
+      userId: m.subject_id,
+      projectId,
+      patch: {
+        type: "doc_restored",
         projectId,
-        patch: {
-          type: "doc_restored",
-          projectId,
-          fileId,
-          versionId: version.id,
-        },
-        source: "system",
-      });
-    }
-  })();
+        fileId,
+        versionId: version.id,
+      },
+      source: "system",
+    });
+  }
 
   return Response.json({
     ok: true,
