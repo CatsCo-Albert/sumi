@@ -38,7 +38,7 @@ src/                          portable substrate
 ├── server/yjs-persistence.ts Redis list-per-doc
 ├── server/edit-position-tracker.ts  RelPos math
 ├── auth/{catsco,actor,identity}.ts
-├── a2ui/                    json-render catalog + renderer (powered by @json-render/core + @json-render/react)
+├── a2ui/                    json-render catalog + shadcn renderer (powered by @json-render/core + @json-render/react + @json-render/shadcn)
 ├── ui-bus/{event-bus,sse-handler}.ts
 ├── storage/                  local FS
 ├── db/                       sqlite migrations
