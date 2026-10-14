@@ -41,6 +41,18 @@ const uiPatchSchema = z.union([
     fileId: z.string().min(1),
     edit: z.unknown().nullable(),
   }),
+  z.object({
+    type: z.enum([
+      "intent_created",
+      "intent_claimed",
+      "intent_answered",
+      "intent_closed",
+    ]),
+    projectId: z.string().min(1),
+    fileId: z.string().min(1),
+    intent: z.unknown().optional(),
+    intentId: z.string().optional(),
+  }),
   z.object({ type: z.literal("noop") }),
 ]);
 

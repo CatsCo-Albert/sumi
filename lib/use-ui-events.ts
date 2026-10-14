@@ -12,6 +12,7 @@
 import { useEffect, useRef } from "react";
 import { useUiStore } from "@/stores/ui-store";
 import { useEditStore } from "@/stores/edit-store";
+import { useIntentStore } from "@/stores/intent-store";
 import { validateUiPatch } from "@/src/a2ui/validate";
 import { getStoredToken } from "./use-session";
 
@@ -49,6 +50,16 @@ export function useUiEvents({
         const patch = validateUiPatch(payload);
         if (!patch) return;
         applyUiPatch(patch);
+
+        // Intent lifecycle — feed the AI chat panel's thread list.
+        if (
+          patch.type === "intent_created" ||
+          patch.type === "intent_claimed" ||
+          patch.type === "intent_answered" ||
+          patch.type === "intent_closed"
+        ) {
+          useIntentStore.getState().applyIntentPatch(patch);
+        }
 
         // Hydrate the pending-edit store for diff decorations.
         if (patch.type === "pending_edit_changed") {

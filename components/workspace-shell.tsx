@@ -19,11 +19,13 @@ import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
 import { AskAgentDialog } from "@/components/ask-agent-dialog";
+import { AiChatPanel } from "@/components/ai-chat-panel";
 import EditCommandBar from "@/components/editor/edit-command-bar";
 import { useEditStore } from "@/stores/edit-store";
 import DocumentListPane from "@/components/document-list-pane";
 import MarkdownPreview from "@/components/markdown-preview";
 import { Toaster } from "@/components/ui/toast";
+import { useIntentStore } from "@/stores/intent-store";
 import { useDocPersistence } from "@/lib/use-doc-persistence";
 
 export default function WorkspaceShell() {
@@ -59,13 +61,18 @@ export default function WorkspaceShell() {
 
   const { actor, loading } = useSession();
 
+  const [aiProjectId, aiFileId] = currentDocumentId
+    ? splitDocId(currentDocumentId)
+    : [null, null];
+
   return (
     <div className="relative h-screen w-full overflow-hidden bg-background text-foreground">
-      {/* Canvas layer — main content */}
+      {/* Canvas layer — main content (shrinks right when the AI panel opens) */}
       <div
         className={cn(
           "absolute inset-0 transition-all duration-200 ease-out-quint",
-          aiOpen && "canvas-retreat"
+          aiOpen && "canvas-retreat",
+          aiOpen && "right-[360px]"
         )}
       >
         {loading ? (
@@ -92,19 +99,16 @@ export default function WorkspaceShell() {
         )}
       />
 
-      {/* Omni dock — floating command surface */}
-      <div className="pointer-events-none absolute inset-0 z-50 flex items-end justify-center p-6">
-        <div
-          className={cn(
-            "pointer-events-auto w-full max-w-2xl transition-all duration-200 ease-spring",
-            aiOpen
-              ? "translate-y-0 opacity-100"
-              : "pointer-events-none translate-y-4 opacity-0"
-          )}
-        >
-          <OmniDock onClose={() => setPanelVisibility("ai", false)} />
-        </div>
-      </div>
+      {/* AI chat panel — right slide-over with intent threads + composer */}
+      {actor && (
+        <AiChatPanel
+          open={aiOpen}
+          onClose={() => setPanelVisibility("ai", false)}
+          projectId={aiProjectId}
+          fileId={aiFileId}
+          actorId={actor.id}
+        />
+      )}
 
       <Toaster />
     </div>
@@ -176,7 +180,13 @@ function EditorPane({
     sel: { text: string; startLine: number; endLine: number } | null
   ) => {
     setAskSelection(sel);
-    setAskOpen(true);
+    if (sel) {
+      // Selection anchored — quick-input dialog keeps the line context.
+      setAskOpen(true);
+    } else {
+      // No selection — the AI panel is the conversation surface.
+      applyUiPatch({ type: "set_panel_visibility", panel: "ai", visible: true });
+    }
   };
 
   // Cmd+K — grab current selection, push it into the AI dock as a prompt.
@@ -377,7 +387,9 @@ function EditorPane({
         selection={askSelection}
         agents={agents}
         onClose={() => setAskOpen(false)}
-        onCreated={() => {}}
+        onCreated={(intent) => {
+          if (intent) useIntentStore.getState().upsertIntent(intent);
+        }}
       />
     </div>
   );
@@ -459,87 +471,5 @@ function splitDocId(docId: string): [string, string] {
   const idx = docId.indexOf("-");
   if (idx === -1) return ["default", docId];
   return [docId.slice(0, idx), docId.slice(idx + 1)];
-}
-
-// ---------------------------------------------------------------------------
-// Omni dock — floating AI command surface
-// ---------------------------------------------------------------------------
-
-function OmniDock({ onClose }: { onClose: () => void }) {
-  const promptCommand = useUiStore((s) => s.promptCommand);
-  const consumePromptCommand = useUiStore((s) => s.consumePromptCommand);
-  const pendingPromptCommands = useUiStore((s) => s.pendingPromptCommands);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [response, setResponse] = useState<string | null>(null);
-
-  const submit = async () => {
-    const prompt = input.trim();
-    if (!prompt || busy) return;
-    setBusy(true);
-    setResponse(null);
-    try {
-      // Stub agent — echo back so the wiring is testable end-to-end.
-      // Real agent path goes through src/agent-client.ts.
-      setResponse(`收到「${prompt}」— agent 待接入`);
-      setInput("");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  useEffect(() => {
-    if (promptCommand) {
-      setInput(promptCommand.prompt);
-      if (promptCommand.autoSend) {
-        submit();
-      }
-      consumePromptCommand();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [promptCommand]);
-
-  return (
-    <div className="material-glass shadow-xl rounded-2xl p-1.5">
-      <div className="flex items-center gap-2 rounded-[14px] bg-background/60 px-4 py-3 ring-1 ring-border/60">
-        <svg
-          className="h-4 w-4 text-muted-foreground"
-          viewBox="0 0 16 16"
-          fill="none"
-        >
-          <path
-            d="M8 1.5L9.5 6.5L14.5 8L9.5 9.5L8 14.5L6.5 9.5L1.5 8L6.5 6.5L8 1.5Z"
-            fill="currentColor"
-            opacity="0.6"
-          />
-        </svg>
-        <input
-          autoFocus
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") onClose();
-            if (e.key === "Enter") submit();
-          }}
-          disabled={busy}
-          placeholder="让 Sumi 做点什么…"
-          className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
-        />
-        {response && (
-          <span className="max-w-[200px] truncate text-[11px] text-muted-foreground">
-            {response}
-          </span>
-        )}
-        {pendingPromptCommands.length > 0 && (
-          <span className="text-[11px] text-muted-foreground">
-            +{pendingPromptCommands.length}
-          </span>
-        )}
-        <kbd className="hidden rounded border border-border/60 px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline-block">
-          esc
-        </kbd>
-      </div>
-    </div>
-  );
 }
 
