@@ -267,21 +267,60 @@ function EditorPane({
     }
   };
 
-  // Load agent members for the ask-agent dialog target picker.
+  // Load all members (users + agents) for the members panel + presence.
+  const [members, setMembers] = useState<
+    Array<{ subjectId: string; role: string; status?: string | null; name?: string | null }>
+  >([]);
+  const [memberPresence, setMemberPresence] = useState<
+    Map<string, { foreground: boolean; fileId?: string }>
+  >(new Map());
+
   useEffect(() => {
     let cancelled = false;
     fetch(apiPath(`/api/projects/${projectId}/members`), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { members: [] }))
       .then((d) => {
         if (cancelled) return;
-        const list = (d.members || []).filter(
-          (m: any) => m.subjectId?.startsWith("a") && m.status !== "disabled"
-        );
-        setAgents(list);
+        setMembers(d.members || []);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
+    };
+  }, [projectId]);
+
+  // Poll page-state for member presence — refreshes every 10s
+  useEffect(() => {
+    if (!projectId) return;
+    let alive = true;
+    const fetchPresence = async () => {
+      try {
+        const res = await fetch(apiPath(`/api/page-state/${projectId}`), {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive) return;
+        const m = new Map<string, { foreground: boolean; fileId?: string }>();
+        for (const member of data.members || []) {
+          const id = (member.user?.id || "").toString();
+          if (id) {
+            m.set(id, {
+              foreground: !!member.pageState?.foreground,
+              fileId: member.fileId,
+            });
+          }
+        }
+        setMemberPresence(m);
+      } catch {
+        /* best-effort */
+      }
+    };
+    void fetchPresence();
+    const iv = setInterval(fetchPresence, 10_000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
     };
   }, [projectId]);
 
@@ -549,6 +588,8 @@ function EditorPane({
                 content={currentContent || initialContent || ""}
                 cursorLine={cursorLine}
                 collaborators={collaborators}
+                members={members}
+                memberPresence={memberPresence}
                 projectId={projectId}
                 fileId={fileId}
               />
@@ -583,6 +624,8 @@ function EditorPane({
                 content={currentContent || initialContent || ""}
                 cursorLine={cursorLine}
                 collaborators={collaborators}
+                members={members}
+                memberPresence={memberPresence}
                 projectId={projectId}
                 fileId={fileId}
               />
@@ -653,6 +696,8 @@ function SidePanel({
   content,
   cursorLine,
   collaborators,
+  members,
+  memberPresence,
   projectId,
   fileId,
 }: {
@@ -663,6 +708,8 @@ function SidePanel({
   content: string;
   cursorLine: number | null;
   collaborators: Array<{ name: string; color: string; id?: string }>;
+  members: Array<{ subjectId: string; role: string; status?: string | null; name?: string | null }>;
+  memberPresence: Map<string, { foreground: boolean; fileId?: string }>;
   projectId: string;
   fileId: string;
 }) {
@@ -709,27 +756,59 @@ function SidePanel({
         />
       ) : (
         <ul className="flex-1 overflow-auto py-2">
-          {collaborators.length === 0 ? (
+          {members.length === 0 ? (
             <li className="p-4 text-[12px] text-muted-foreground">
-              暂无在线成员
+              暂无成员
             </li>
           ) : (
-            collaborators.map((c, i) => (
-              <li
-                key={c.id || i}
-                className="flex items-center gap-2 px-3 py-1.5"
-              >
-                <span
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
-                  style={{ background: c.color }}
+            members.map((m) => {
+              const presence = memberPresence.get(m.subjectId);
+              const online = presence !== undefined;
+              const fg = presence?.foreground;
+              const onThisDoc = presence?.fileId === fileId;
+              const isAgent = m.subjectId.startsWith("a");
+              return (
+                <li
+                  key={m.subjectId}
+                  className="flex items-center gap-2 px-3 py-1.5"
                 >
-                  {c.name.slice(0, 1).toUpperCase()}
-                </span>
-                <span className="truncate text-[12px] text-foreground">
-                  {c.name}
-                </span>
-              </li>
-            ))
+                  <span
+                    className={cn(
+                      "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white",
+                      isAgent ? "bg-violet-500" : "bg-primary",
+                      m.status === "disabled" && "opacity-40"
+                    )}
+                  >
+                    {(m.name || m.subjectId).slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 truncate text-[12px] text-foreground">
+                      {m.name || m.subjectId}
+                      {isAgent && (
+                        <span className="rounded-full bg-violet-500/10 px-1 py-0.5 text-[9px] font-medium text-violet-600">
+                          agent
+                        </span>
+                      )}
+                      {m.status === "disabled" && (
+                        <span className="rounded-full bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+                          停用
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {online
+                        ? fg
+                          ? onThisDoc
+                            ? "👁 前台"
+                            : `👁 ${presence?.fileId || "前台"}`
+                          : "💤 后台"
+                        : "离线"}
+                      {m.role === "owner" && " · owner"}
+                    </div>
+                  </div>
+                </li>
+              );
+            })
           )}
         </ul>
       )}
