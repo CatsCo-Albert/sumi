@@ -753,6 +753,7 @@ const server = http.createServer(async (req, res) => {
       roomName: string;
       fileId: string;
       user: { id?: string; name?: string; image?: string } | null;
+      userKind: "user" | "agent" | "unknown";
       pageState: unknown;
     }> = [];
     docs.forEach((docData, roomName) => {
@@ -761,18 +762,23 @@ const server = http.createServer(async (req, res) => {
       const states = docData.awareness.getStates();
       states.forEach((state, clientId) => {
         const user = state.user as { id?: string; name?: string; image?: string } | undefined;
+        // Infer kind: 'a*' = agent, 'u*' = user, else unknown
+        const uid = (user?.id || "").toString();
+        const userKind: "user" | "agent" | "unknown" =
+          uid.startsWith("a") ? "agent" : uid.startsWith("u") ? "user" : "unknown";
         if (state.pageState) {
           members.push({
             clientId,
             roomName,
             fileId,
             user: user || null,
+            userKind,
             pageState: state.pageState,
           });
         }
       });
     });
-    sendJson(res, 200, { projectId, members });
+    sendJson(res, 200, { projectId, members, clientCount: members.length });
     return;
   }
 

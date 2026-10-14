@@ -75,6 +75,17 @@ export default function WorkspaceShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [currentDocumentId, setCurrentDocumentId]);
 
+  // Track foreground/background — agents want to know if the user
+  // is actually looking at the screen right now.
+  const [foreground, setForeground] = useState(
+    () => typeof document !== "undefined" ? !document.hidden : true
+  );
+  useEffect(() => {
+    const onVis = () => setForeground(!document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
   // Broadcast page state to all active Yjs providers so other clients
   // (humans + agents) can see where we are + what we can do.
   useEffect(() => {
@@ -88,8 +99,9 @@ export default function WorkspaceShell() {
       activePendingEdits: useEditStore.getState().pendingEdits.map(e => e.id),
       selection: undefined, // wire up when CM selection tracking lands
       cursorLine: undefined,
+      foreground,
     });
-  }, [currentDocumentId, activeMainBlock, panelVisibility, actor]);
+  }, [currentDocumentId, activeMainBlock, panelVisibility, actor, foreground]);
 
   const aiOpen = panelVisibility.ai;
   const attentionTarget = attentionSignal?.target;

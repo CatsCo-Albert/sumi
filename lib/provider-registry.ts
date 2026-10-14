@@ -45,6 +45,8 @@ export function broadcastPageState(pageState: {
   selection?: { startLine: number; endLine: number };
   /** Cursor position (line). */
   cursorLine?: number;
+  /** Whether this client is in the foreground (document not hidden). */
+  foreground?: boolean;
 }) {
   providers.forEach((provider) => {
     try {
