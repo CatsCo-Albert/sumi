@@ -415,6 +415,157 @@ def cmd_connect(a: argparse.Namespace) -> None:
     print("# For bidirectional edit: connect the WS above with y-webrtc/y-websocket.")
 
 
+def cmd_connect(a: argparse.Namespace) -> None:
+    """
+    Interactive-ish: prints WS URL + handshake example, then streams inbound
+    events via y-protocols. For real collab, use `sumi co-edit` or connect
+    the WS in your own runtime.
+    """
+    ws_url = _env("SUMI_WS_URL", "ws://localhost:12345")
+    doc = f"{a.project}-{a.file}"
+    print(f"# Sumi realtime sync")
+    print(f"# room: {doc}")
+    print(f"# url:  {ws_url}")
+    print()
+    print("import asyncio, json")
+    print("import websockets, y_py as Y")
+    print()
+    print(f"async def run():")
+    print(f'    doc = Y.Doc()')
+    print(f'    async with websockets.connect("{ws_url}") as ws:')
+    print(f'        await Y.sync(doc, ws)')
+    print(f'        text = doc.get_text("content")')
+    print(f'        text.observe(lambda e: print("remote change:", e.delta))')
+    print(f'        await asyncio.Future()')
+    print()
+    print("# For simple read-only read: use `sumi read-doc` (HTTP).")
+    print("# For bidirectional edit: use `sumi co-edit` — syncs a local file")
+    print("#   bidirectionally with the doc (poll + watch).")
+
+
+# ---------------------------------------------------------------------------
+# co-edit — bidirectional file ↔ doc sync (HTTP polling)
+# ---------------------------------------------------------------------------
+
+import hashlib
+import threading
+import time
+
+
+def cmd_co_edit(a: argparse.Namespace) -> None:
+    """Sync a local file bidirectionally with a Sumi doc.
+
+    - Local file changes → auto `POST /api/pending-edits` (1 block, whole file)
+    - Remote doc changes → overwrite local file
+
+    Polls every --interval seconds (default 2).
+    Ctrl-C to stop.
+    """
+    project, file_id, local = a.project, a.file, a.local
+    interval = a.interval
+
+    def remote_hash() -> str | None:
+        try:
+            r = _req(
+                "GET",
+                f"/api/documents/content?projectId={project}&fileId={urllib.request.quote(file_id)}",
+            )
+            return r.get("contentHash") or hashlib.sha256(
+                r.get("content", "").encode()
+            ).hexdigest()
+        except Exception:
+            return None
+
+    def remote_content() -> str | None:
+        try:
+            r = _req(
+                "GET",
+                f"/api/documents/content?projectId={project}&fileId={urllib.request.quote(file_id)}",
+            )
+            return r.get("content")
+        except Exception:
+            return None
+
+    def local_content() -> str:
+        try:
+            return open(local, "r", encoding="utf-8").read()
+        except FileNotFoundError:
+            return ""
+
+    def local_hash() -> str:
+        return hashlib.sha256(local_content().encode()).hexdigest()
+
+    # Initial pull — local wins if file exists and non-empty, else remote wins
+    remote = remote_content()
+    local_txt = local_content()
+    if remote is None:
+        raise SystemExit(f"can't reach remote doc {project}:{file_id}")
+    if not local_txt and remote:
+        open(local, "w", encoding="utf-8").write(remote)
+        print(f"[co-edit] pulled remote → {local} ({len(remote)} bytes)")
+        last_remote_hash = hashlib.sha256(remote.encode()).hexdigest()
+    else:
+        # Push local up once so remote matches
+        blocks = [{"startLine": 1, "endLine": 999999, "updated": local_txt}]
+        _req(
+            "POST",
+            "/api/pending-edits",
+            {
+                "projectId": project,
+                "fileId": file_id,
+                "blocks": blocks,
+                "description": "co-edit bootstrap",
+            },
+        )
+        print(f"[co-edit] pushed local → remote ({len(local_txt)} bytes)")
+        last_remote_hash = remote_hash() or ""
+
+    last_local_hash = local_hash()
+    print(f"[co-edit] syncing {local} ⇄ {project}:{file_id} every {interval}s")
+    print("[co-edit] Ctrl-C to stop")
+
+    try:
+        while True:
+            time.sleep(interval)
+
+            # Remote → local
+            rh = remote_hash()
+            if rh and rh != last_remote_hash:
+                remote = remote_content()
+                if remote is not None:
+                    open(local, "w", encoding="utf-8").write(remote)
+                    last_local_hash = local_hash()
+                    last_remote_hash = rh
+                    print(f"[co-edit] ↓ remote → local ({len(remote)} bytes)")
+
+            # Local → remote (propose-edit with the whole file as one block)
+            lh = local_hash()
+            if lh != last_local_hash:
+                local_txt = local_content()
+                blocks = [
+                    {"startLine": 1, "endLine": 999999, "updated": local_txt}
+                ]
+                try:
+                    _req(
+                        "POST",
+                        "/api/pending-edits",
+                        {
+                            "projectId": project,
+                            "fileId": file_id,
+                            "blocks": blocks,
+                            "description": "co-edit sync",
+                        },
+                    )
+                    print(f"[co-edit] ↑ local → remote (pending_edit)")
+                    last_local_hash = lh
+                    last_remote_hash = remote_hash() or last_remote_hash
+                except Exception as e:
+                    print(f"[co-edit] push failed: {e}", file=sys.stderr)
+
+    except KeyboardInterrupt:
+        print("\n[co-edit] stopped")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="sumi", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -479,6 +630,12 @@ def main() -> None:
     s.add_argument("--compact", action="store_true", help="drop ping heartbeats")
     s.set_defaults(fn=cmd_watch)
     s = sub.add_parser("connect"); s.add_argument("--project", required=True); s.add_argument("--file", required=True); s.set_defaults(fn=cmd_connect)
+    s = sub.add_parser("co-edit")
+    s.add_argument("--project", required=True)
+    s.add_argument("--file", required=True, help="remote fileId")
+    s.add_argument("--local", required=True, help="local file path to sync")
+    s.add_argument("--interval", type=float, default=2.0, help="poll interval seconds (default 2)")
+    s.set_defaults(fn=cmd_co_edit)
 
     args = p.parse_args()
     args.fn(args)

@@ -14,6 +14,20 @@ Direct full-document writes (`PUT /api/documents/content`) are reserved for bran
 
 ## Common operations
 
+### Co-edit a file locally (recommended for long sessions)
+
+```bash
+sumi co-edit --project prj_x --file notes/intro.md --local /tmp/work.md
+# local ↔ remote syncs every 2s — you read/write /tmp/work.md,
+# Sumi turns every save into a pending-edit proposal
+```
+
+**When to use co-edit vs propose-edit:**
+- `co-edit` — you want a live read-write copy on disk, iterate locally, push changes as pending edits
+- `propose-edit` — one-shot targeted change; you compute the diff yourself
+
+`co-edit` initial pull: if `--local` is empty, remote fills it; if `--local` has content, it pushes once as a pending edit. Then it polls every `--interval` seconds (default 2) in both directions.
+
 ### Read a document
 
 ```bash
