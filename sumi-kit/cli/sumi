@@ -205,11 +205,30 @@ def cmd_answer_intent(a: argparse.Namespace) -> None:
     body: dict = {"id": a.id, "status": "answered"}
     if a.text:
         body["answerText"] = a.text
+    if a.spec:
+        # --spec accepts a JSON string or @path/to/file.json
+        spec_text = _read_arg_or_file(a.spec)
+        # Validate minimal shape
+        try:
+            obj = json.loads(spec_text)
+            if not isinstance(obj, dict) or "root" not in obj or "elements" not in obj:
+                raise SystemExit("--spec must be a json-render Spec ({root, elements:{…}})")
+        except json.JSONDecodeError as e:
+            raise SystemExit(f"--spec is not valid JSON: {e}")
+        body["answerText"] = spec_text
     if a.edit:
         body["answerEditId"] = a.edit
-    if not a.text and not a.edit:
-        raise SystemExit("answer-intent needs --text and/or --edit")
+    if not a.text and not a.edit and not a.spec:
+        raise SystemExit("answer-intent needs --text and/or --edit and/or --spec")
     _pp(_req("PATCH", "/api/intents", body))
+
+
+def _read_arg_or_file(v: str) -> str:
+    """--xxx @file.json reads from file; otherwise return as-is."""
+    if v.startswith("@"):
+        with open(v[1:], "r", encoding="utf-8") as f:
+            return f.read()
+    return v
 
 
 def cmd_close_intent(a: argparse.Namespace) -> None:
@@ -401,6 +420,7 @@ def main() -> None:
     s.add_argument("--id", required=True)
     s.add_argument("--text", help="plain-text answer")
     s.add_argument("--edit", help="pending_edit id if answered via an edit")
+    s.add_argument("--spec", help="json-render Spec JSON or @path/to/file.json — rendered as UI")
     s.set_defaults(fn=cmd_answer_intent)
     s = sub.add_parser("close-intent"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_close_intent)
     s = sub.add_parser("shadows")

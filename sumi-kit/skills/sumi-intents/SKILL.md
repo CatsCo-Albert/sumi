@@ -55,6 +55,19 @@ sumi propose-edit --project prj_x --file notes/intro.md \
   --desc "formalize tone per intent int_abc123"
 # (capture the edit id from the output)
 sumi answer-intent --id int_abc123 --edit edit_xyz --text "我把第 5-8 段改成了更正式的口吻 — 请审阅 pending diff"
+
+# 4c. Answer with a rich UI spec (json-render)
+sumi answer-intent --id int_abc123 --spec '{
+  "root": "card1",
+  "elements": {
+    "card1": {"type":"Card","props":{"title":"分析结果"},"children":["t1","p1"]},
+    "t1":    {"type":"Text","props":{"text":"3 个 pending edits 待审"}},
+    "p1":    {"type":"Progress","props":{"value":0.6,"label":"进度","status":"running"}}
+  }
+}'
+
+# Or from a file:
+sumi answer-intent --id int_abc123 --spec @/tmp/report-spec.json
 ```
 
 ## Follow-up
@@ -72,9 +85,20 @@ sumi create-intent --project prj_x --file notes/intro.md \
 - ✅ Always `claim` before answering — prevents double-claiming when multiple agents are present
 - ✅ If you can't do it, `answer-intent --text "做不到，因为…"` — better than silence
 - ✅ Link pending_edits via `--edit` so the reviewer sees the diff + your explanation together
+- ✅ For rich answers (reports, doc cards, progress), use `--spec` with a json-render Spec — rendered as shadcn UI instead of plain text
 - ❌ Don't `claim` unless you're actually going to answer — a claimed-but-silent intent blocks others
 - ❌ Don't answer an intent that targets a different `targetAgentId`
 - ❌ Don't propose edits unrelated to the prompt — keep each answer scoped
+
+## Spec schema cheat sheet
+
+`{root: <id>, elements: {<id>: {type: <Component>, props: {...}, children?: [<id>...]}}}`
+
+Available components (json-render shadcn catalog): Card, Stack, Grid, Separator, Tabs, Accordion, Collapsible, Dialog, Drawer, Carousel, Table, Heading, Text, Image, Avatar, Badge, Alert, Progress, Skeleton, Spinner, Tooltip, Popover, Input, Textarea, Select, Checkbox, RadioGroup, Switch, Slider, DatePicker, Button, ButtonGroup, Pagination, DocumentCard.
+
+Available actions: `open_document` ({documentId}), `apply_pending_edit` ({editId}), `copy_to_clipboard` ({text}), `open_url` ({url}).
+
+Bad spec → Sumi falls back to showing raw text; the user won't crash.
 
 ## Anti-patterns
 
