@@ -142,36 +142,26 @@ def cmd_reject_edit(a: argparse.Namespace) -> None:
 def cmd_page_state(a: argparse.Namespace) -> None:
     """Aggregate pageState from all clients across the project's rooms.
 
-    Hits the WS server's admin surface (awareness lives there), not Next.js.
-    SUMI_WS_URL is converted ws:// → http:// for the HTTP endpoint.
+    Goes through the app's own /api/page-state route, which forwards to the WS
+    server's admin surface where awareness lives. Calling the WS admin endpoint
+    directly (as this used to) only works when that port is reachable: behind an
+    artifact gateway only the app's port is routed, and SUMI_WS_URL there is a
+    WebSocket URL carrying the app path, so the request 404s.
     """
-    ws_url = _env("SUMI_WS_URL", "ws://localhost:12345")
-    http_base = ws_url.replace("ws://", "http://").replace("wss://", "https://").rstrip("/")
-    url = f"{http_base}/page-state/{urllib.request.quote(a.project)}"
-    req = urllib.request.Request(url, method="GET")
-    key = _env("CATSCO_API_KEY") or _env("SUMI_API_KEY")
-    if key:
-        req.add_header("Authorization", f"ApiKey {key}")
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read().decode("utf-8"))
-            if a.compact:
-                for m in data.get("members", []):
-                    user = (m.get("user") or {}).get("name", "?")
-                    kind = m.get("userKind", "?")
-                    state = m.get("pageState", {})
-                    doc = state.get("currentDocumentId", "—")
-                    role = state.get("role", "?")
-                    ai = "🤖" if state.get("aiOpen") else "·"
-                    fg = "👁" if state.get("foreground") else "💤"
-                    pending = len(state.get("activePendingEdits", []))
-                    print(f"{user:20} {kind:6} {doc:40} {role:8} ai={ai} fg={fg} pending={pending}")
-            else:
-                _pp(data)
-    except urllib.error.HTTPError as e:
-        _pp({"error": f"HTTP {e.code}", "body": e.read().decode("utf-8", "replace")})
-    except Exception as e:
-        _pp({"error": str(e)})
+    data = _req("GET", f"/api/page-state/{urllib.request.quote(a.project)}")
+    if a.compact:
+        for m in data.get("members", []):
+            user = (m.get("user") or {}).get("name", "?")
+            kind = m.get("userKind", "?")
+            state = m.get("pageState", {})
+            doc = state.get("currentDocumentId", "—")
+            role = state.get("role", "?")
+            ai = "🤖" if state.get("aiOpen") else "·"
+            fg = "👁" if state.get("foreground") else "💤"
+            pending = len(state.get("activePendingEdits", []))
+            print(f"{user:20} {kind:6} {doc:40} {role:8} ai={ai} fg={fg} pending={pending}")
+    else:
+        _pp(data)
 
 
 def cmd_onboard(a: argparse.Namespace) -> None:
