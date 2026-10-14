@@ -524,6 +524,25 @@ export default function DocumentListPane() {
       description: subjectId,
       variant: "success",
     });
+
+    // If it's a contact (not already a member), push the invite via CatsCo
+    const isContact = contacts.some((c) => c.subjectId === subjectId);
+    if (isContact && selected) {
+      try {
+        await fetch(apiPath("/api/friends"), {
+          method: "POST",
+          headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subjectId,
+            kind: subjectId.startsWith("a") ? "agent" : "user",
+            projectId: selected.id,
+            projectName: selected.name,
+          }),
+        });
+      } catch {
+        /* invite is best-effort — member is already added */
+      }
+    }
   };
 
   const removeMember = async (subjectId: string) => {
