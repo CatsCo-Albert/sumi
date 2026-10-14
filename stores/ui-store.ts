@@ -38,6 +38,8 @@ export interface FocusRangeCommand {
 
 interface UiStoreState {
   currentDocumentId: string | null;
+  /** Open doc tabs — the user can flip between them without leaving editor. */
+  openDocuments: string[];
   activeMainBlock: WorkspaceMainBlock;
   panelVisibility: Record<PanelName, boolean>;
   panelWidth: Record<PanelName, number>;
@@ -49,6 +51,7 @@ interface UiStoreState {
   lastRestore: { documentId: string; fileId: string; versionId: string; token: number } | null;
 
   setCurrentDocumentId: (id: string | null) => void;
+  closeDocument: (id: string) => void;
   setActiveMainBlock: (block: WorkspaceMainBlock) => void;
   setPanelVisibility: (panel: PanelName, visible: boolean) => void;
   setPanelWidth: (panel: PanelName, widthPercent: number) => void;
@@ -67,6 +70,7 @@ const signal = (target: AttentionTarget, reason: AttentionSignal["reason"] = "ui
 
 export const useUiStore = create<UiStoreState>((set, get) => ({
   currentDocumentId: null,
+  openDocuments: [],
   activeMainBlock: "editor",
   panelVisibility: { sidebar: true, ai: false, inspector: false },
   panelWidth: { sidebar: 22, ai: 34, inspector: 26 },
@@ -77,15 +81,38 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   lastRestore: null,
 
   setCurrentDocumentId: (id) =>
-    set((state) => ({
-      currentDocumentId: id,
+    set((state) => {
+      const openDocuments = id
+        ? state.openDocuments.includes(id)
+          ? state.openDocuments
+          : [...state.openDocuments, id]
+        : state.openDocuments;
+      return {
+        currentDocumentId: id,
+        openDocuments,
+        activeMainBlock:
+          id && state.currentDocumentId !== id
+            ? state.activeMainBlock === "management" ? "editor" : state.activeMainBlock
+            : !id && state.activeMainBlock !== "editor" && state.activeMainBlock !== "management"
+              ? "editor"
+              : state.activeMainBlock,
+      };
+    }),
+
+  /** Close one open doc tab. If it was current, activate the previous. */
+  closeDocument: (id: string) => {
+    const { openDocuments, currentDocumentId } = get();
+    const remaining = openDocuments.filter((d) => d !== id);
+    set({
+      openDocuments: remaining,
+      currentDocumentId:
+        currentDocumentId === id
+          ? remaining[remaining.length - 1] ?? null
+          : currentDocumentId,
       activeMainBlock:
-        id && state.currentDocumentId !== id
-          ? state.activeMainBlock === "management" ? "editor" : state.activeMainBlock
-          : !id && state.activeMainBlock !== "editor" && state.activeMainBlock !== "management"
-            ? "editor"
-            : state.activeMainBlock,
-    })),
+        currentDocumentId === id ? "editor" : get().activeMainBlock,
+    });
+  },
 
   setActiveMainBlock: (block) =>
     set((state) => ({

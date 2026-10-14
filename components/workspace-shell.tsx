@@ -167,6 +167,9 @@ function EditorPane({
   actor: { id: string; name: string; kind: "user" | "agent" };
 }) {
   const setCurrentDocumentId = useUiStore((s) => s.setCurrentDocumentId);
+  const openDocuments = useUiStore((s) => s.openDocuments);
+  const closeDocument = useUiStore((s) => s.closeDocument);
+  const currentDocumentId = useUiStore((s) => s.currentDocumentId);
   const router = useRouter();
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
@@ -365,6 +368,45 @@ function EditorPane({
         >
           ←
         </button>
+
+        {/* Open doc tabs */}
+        <div className="flex items-center gap-0.5 overflow-x-auto">
+          {openDocuments.map((docId) => {
+            const [, docFileId] = splitDocId(docId);
+            const isActive = docId === currentDocumentId;
+            const docTitle = docFileId?.split("/").pop() || docFileId || docId;
+            return (
+              <div
+                key={docId}
+                className={cn(
+                  "group flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors",
+                  isActive
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                )}
+              >
+                <button
+                  onClick={() => setCurrentDocumentId(docId)}
+                  className="max-w-[120px] truncate"
+                >
+                  {docTitle}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeDocument(docId);
+                  }}
+                  title="关闭"
+                  className="rounded-sm opacity-0 transition-opacity hover:bg-foreground/10 group-hover:opacity-100"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Breadcrumb */}
         <div className="text-[13px] font-medium text-muted-foreground">
           {fileId.split("/").pop() || fileId}
         </div>
@@ -537,7 +579,39 @@ function EditorPane({
         )}
       </div>
 
-      {/* Cmd+Shift+I — ask agent about selection */}
+      {/* Status bar — bottom edge: cursor, word count, pending count, conn status */}
+      <footer className="flex h-7 items-center gap-4 border-t border-border/60 bg-background px-4 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <span
+            className={cn(
+              "inline-block h-1.5 w-1.5 rounded-full",
+              connStatus.isSynced ? "bg-emerald-500" : connStatus.isConnected ? "bg-amber-500" : "bg-red-500"
+            )}
+          />
+          {connStatus.isSynced ? "已同步" : connStatus.isConnected ? "连接中" : "离线"}
+        </div>
+        {cursorLine && <div>Ln {cursorLine}</div>}
+        {currentContent && (
+          <div>{currentContent.split(/\s+/).filter(Boolean).length} 字</div>
+        )}
+        {(() => {
+          const pending = useEditStore.getState().pendingEdits.filter(
+            (e) => e.status === "pending"
+          ).length;
+          return pending > 0 ? (
+            <div className="flex items-center gap-1 text-amber-600">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+              {pending} pending
+            </div>
+          ) : null;
+        })()}
+        <div className="ml-auto flex items-center gap-3">
+          {viewMode === "preview" && (
+            <span className="text-muted-foreground/70">预览模式 — 只读</span>
+          )}
+          <span className="text-muted-foreground/50">{fileId}</span>
+        </div>
+      </footer>
       <AskAgentDialog
         open={askOpen}
         projectId={projectId}
