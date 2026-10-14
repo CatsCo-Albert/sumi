@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { getAuthHeaders } from "@/lib/use-session";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import type { IntentRow } from "@/src/intents";
 
 interface AskAgentDialogProps {
   open: boolean;
@@ -25,7 +26,7 @@ interface AskAgentDialogProps {
   /** Agent members in the project — for picking a target. */
   agents: Array<{ subjectId: string; name: string | null }>;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (intent?: IntentRow) => void;
 }
 
 export function AskAgentDialog({
@@ -82,8 +83,9 @@ export function AskAgentDialog({
         });
         return;
       }
+      const { intent } = await res.json().catch(() => ({ intent: undefined }));
       toast({ title: "已询问 agent", variant: "success" });
-      onCreated();
+      onCreated(intent);
       onClose();
     } finally {
       setBusy(false);
