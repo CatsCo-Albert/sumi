@@ -405,11 +405,12 @@ export const useEditStore = create<EditStoreState>((set, get) => ({
     const cb = get().syncLocksCallback;
     if (cb) cb(get().getPendingLocks());
 
-    for (const editId of pendingIds) {
-      fetch("/api/pending-edits", {
-        method: "DELETE",
+    // Single bulk call — N individual DELETEs are slow + race-prone.
+    if (pendingIds.length > 0) {
+      fetch("/api/pending-edits/bulk-reject", {
+        method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ editId }),
+        body: JSON.stringify({ ids: pendingIds }),
       }).catch(() => undefined);
     }
   },

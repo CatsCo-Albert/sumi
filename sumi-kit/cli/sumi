@@ -19,6 +19,10 @@ Usage:
   sumi list-pending --project prj_x
   sumi pending-status --project prj_x
   sumi get-onboard-prompt --project prj_x [--file notes/intro.md]
+  sumi shadows --project prj_x [--file notes/intro.md] [--mine]
+  sumi shadow-create --project prj_x --file notes/intro.md [--content "..."|--from-file p] [--title t]
+  sumi shadow-promote --id shadow_x
+  sumi shadow-discard --id shadow_x
 """
 
 from __future__ import annotations
@@ -212,6 +216,57 @@ def cmd_close_intent(a: argparse.Namespace) -> None:
     _pp(_req("PATCH", "/api/intents", {"id": a.id, "status": "closed"}))
 
 
+# ---------------------------------------------------------------------------
+# Shadow docs —— 私密草稿区
+# ---------------------------------------------------------------------------
+
+
+def cmd_shadows(a: argparse.Namespace) -> None:
+    qs = f"projectId={urllib.request.quote(a.project)}"
+    if a.file:
+        qs += f"&fileId={urllib.request.quote(a.file)}"
+    if a.mine:
+        qs += "&mine=1"
+    if a.all:
+        qs += "&all=1"
+    r = _req("GET", f"/api/shadow-docs?{qs}")
+    if a.compact:
+        for s in r.get("shadows", []):
+            print(
+                f"[{s['status']:9s}] {s['id']}  {s['fileId']}  "
+                f"{(s.get('title') or '')[:50]}"
+            )
+    else:
+        _pp(r)
+
+
+def cmd_shadow_create(a: argparse.Namespace) -> None:
+    content = a.content
+    if a.from_file:
+        with open(a.from_file, "r", encoding="utf-8") as f:
+            content = f.read()
+    elif content is None and not sys.stdin.isatty():
+        content = sys.stdin.read()
+    if content is None:
+        raise SystemExit("shadow-create needs --content, --from-file, or stdin")
+    body: dict = {
+        "projectId": a.project,
+        "fileId": a.file,
+        "content": content,
+    }
+    if a.title:
+        body["title"] = a.title
+    _pp(_req("POST", "/api/shadow-docs", body))
+
+
+def cmd_shadow_promote(a: argparse.Namespace) -> None:
+    _pp(_req("POST", "/api/shadow-docs/promote", {"id": a.id}))
+
+
+def cmd_shadow_discard(a: argparse.Namespace) -> None:
+    _pp(_req("PATCH", "/api/shadow-docs", {"id": a.id, "status": "discarded"}))
+
+
 def cmd_watch(a: argparse.Namespace) -> None:
     """
     SSE subscription — stream pending_edit_changed + other UiPatch events
@@ -222,14 +277,18 @@ def cmd_watch(a: argparse.Namespace) -> None:
     qs = f"?projectId={a.project}" if a.project else ""
     url = f"{base}/api/ui/events{qs}"
     backoff = 1
+    last_event_id = None  # Last-Event-ID resume cursor, survives reconnects
     while True:
         try:
             req = urllib.request.Request(url, headers=_headers())
             req.add_header("Accept", "text/event-stream")
             req.add_header("Cache-Control", "no-cache")
+            if last_event_id:
+                req.add_header("Last-Event-ID", last_event_id)
             with urllib.request.urlopen(req, timeout=60) as r:
                 backoff = 1
                 event_name = None
+                event_id = None
                 data_lines = []
                 for raw in r:
                     line = raw.decode("utf-8", errors="replace").rstrip("\n")
@@ -250,12 +309,17 @@ def cmd_watch(a: argparse.Namespace) -> None:
                                     if not isinstance(obj, str) else obj
                                 ), flush=True
                             )
+                        if event_id:
+                            last_event_id = event_id
                         event_name = None
+                        event_id = None
                         data_lines = []
                         continue
                     if line.startswith(":"):
                         continue
-                    if line.startswith("event:"):
+                    if line.startswith("id:"):
+                        event_id = line[3:].strip()
+                    elif line.startswith("event:"):
                         event_name = line[6:].strip()
                     elif line.startswith("data:"):
                         data_lines.append(line[5:].lstrip())
@@ -339,6 +403,22 @@ def main() -> None:
     s.add_argument("--edit", help="pending_edit id if answered via an edit")
     s.set_defaults(fn=cmd_answer_intent)
     s = sub.add_parser("close-intent"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_close_intent)
+    s = sub.add_parser("shadows")
+    s.add_argument("--project", required=True)
+    s.add_argument("--file", help="filter by fileId")
+    s.add_argument("--mine", action="store_true", help="only my drafts")
+    s.add_argument("--all", action="store_true", help="include promoted/discarded")
+    s.add_argument("--compact", action="store_true", help="one line per shadow")
+    s.set_defaults(fn=cmd_shadows)
+    s = sub.add_parser("shadow-create")
+    s.add_argument("--project", required=True)
+    s.add_argument("--file", required=True)
+    s.add_argument("--content", help="markdown text; omit to read stdin")
+    s.add_argument("--from-file", help="read content from a local file")
+    s.add_argument("--title", help="short label, e.g. 'formal rewrite v1'")
+    s.set_defaults(fn=cmd_shadow_create)
+    s = sub.add_parser("shadow-promote"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_shadow_promote)
+    s = sub.add_parser("shadow-discard"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_shadow_discard)
     s = sub.add_parser("watch")
     s.add_argument("--project", help="filter events to this projectId")
     s.add_argument("--json", action="store_true", help="pretty-print JSON instead of one-liner")

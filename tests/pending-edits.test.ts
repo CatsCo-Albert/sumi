@@ -2,15 +2,17 @@
  * Pending-edit flow: agents propose → reviewer applies/rejects.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { promises as fs } from "fs";
 import * as Y from "yjs";
+import * as jose from "jose";
 import { getDb, resetDbForTests } from "../src/db";
 import {
   upsertSubject,
   createProject,
   grantMembership,
 } from "../src/auth/identity";
+import { subscribeUiEvents, resetUiEventBusForTests, type UiEvent } from "../src/ui-bus/event-bus";
 import {
   addPendingEdit,
   listPendingEdits,
@@ -26,11 +28,48 @@ import {
 
 const TEST_DIR = `/tmp/sumi-pending-test-${process.pid}`;
 process.env.SUMI_DATA_DIR = TEST_DIR;
+process.env.OC_JWT_SECRET = "test-secret-pending";
+
+// catsco.ts captures OC_JWT_SECRET at module-eval time — import the route
+// lazily so the secret above is visible.
+const { POST: bulkReject } = await import(
+  "../app/api/pending-edits/bulk-reject/route"
+);
+
+let testCounter = 0;
 
 beforeEach(async () => {
+  // 独立目录避免与 fire-and-forget 的 ui-events 持久化写竞争（ENOTEMPTY）
   resetDbForTests();
-  await fs.rm(TEST_DIR, { recursive: true, force: true });
+  resetUiEventBusForTests();
+  process.env.SUMI_DATA_DIR = `${TEST_DIR}-${testCounter++}`;
+  await fs.rm(process.env.SUMI_DATA_DIR, { recursive: true, force: true });
 });
+
+/** Mint a CatsCo-shaped user JWT for the given numeric uid. */
+async function userJwt(uid: number, username = `user${uid}`): Promise<string> {
+  return new jose.SignJWT({
+    userId: uid,
+    username,
+    token_type: "user",
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuer("catscompany")
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(new TextEncoder().encode(process.env.OC_JWT_SECRET));
+}
+
+function bulkReq(ids: string[], token: string): Request {
+  return new Request("http://localhost/api/pending-edits/bulk-reject", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ ids }),
+  });
+}
 
 describe("pending edits", () => {
   it("creates one row per block", async () => {
@@ -130,6 +169,95 @@ describe("pending edits", () => {
     expect(getPendingEdit(db, edit.id)).not.toBeNull();
     expect(deletePendingEdit(db, edit.id)).toBe(true);
     expect(getPendingEdit(db, edit.id)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/pending-edits/bulk-reject — one transaction, per-project auth
+// ---------------------------------------------------------------------------
+
+describe("POST /api/pending-edits/bulk-reject", () => {
+  async function seed() {
+    const db = await getDb();
+    upsertSubject(db, { subjectId: "u1", kind: "user", displayName: "Alice" });
+    upsertSubject(db, { subjectId: "u2", kind: "user", displayName: "Bob" });
+    upsertSubject(db, { subjectId: "a9", kind: "agent", displayName: "ci" });
+    const project = createProject(db, { name: "x", ownerSubjectId: "u1" });
+    grantMembership(db, {
+      projectId: project.id,
+      subjectId: "u2",
+      role: "editor",
+      grantedBy: "u1",
+    });
+    return { db, project };
+  }
+
+  it("rejects multiple edits in one call and returns the real count", async () => {
+    const { db, project } = await seed();
+    const e1 = addPendingEdit(db, {
+      projectId: project.id, fileId: "a.md", userId: "u1", authorId: "a9",
+      blocks: [{ startLine: 1, endLine: 1, updated: "x" }],
+    });
+    const e2 = addPendingEdit(db, {
+      projectId: project.id, fileId: "b.md", userId: "u1", authorId: "a9",
+      blocks: [{ startLine: 1, endLine: 1, updated: "y" }],
+    });
+    // Pre-rejected row — must be skipped by the count.
+    updatePendingEditStatus(db, e2[0].id, "rejected");
+
+    const res = await bulkReject(
+      bulkReq([e1[0].id, e2[0].id, "edit_missing"], await userJwt(1))
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ rejected: 1 });
+    expect(getPendingEdit(db, e1[0].id)!.status).toBe("rejected");
+  });
+
+  it("rejects when the actor is neither reviewer nor owner", async () => {
+    const { db, project } = await seed();
+    const [edit] = addPendingEdit(db, {
+      projectId: project.id, fileId: "a.md", userId: "u1", authorId: "a9",
+      blocks: [{ startLine: 1, endLine: 1, updated: "x" }],
+    });
+
+    // u2 is an editor but not the reviewer (u1) or the owner → 403.
+    const res = await bulkReject(bulkReq([edit.id], await userJwt(2)));
+    expect(res.status).toBe(403);
+    expect(getPendingEdit(db, edit.id)!.status).toBe("pending");
+
+    // Owner CAN reject someone else's review queue.
+    const ok = await bulkReject(bulkReq([edit.id], await userJwt(1)));
+    expect(ok.status).toBe(200);
+    expect(getPendingEdit(db, edit.id)!.status).toBe("rejected");
+  });
+
+  it("broadcasts pending_edit_changed (edit:null) to every member", async () => {
+    const { db, project } = await seed();
+    const [edit] = addPendingEdit(db, {
+      projectId: project.id, fileId: "a.md", userId: "u2", authorId: "a9",
+      blocks: [{ startLine: 1, endLine: 1, updated: "x" }],
+    });
+
+    const events: UiEvent[] = [];
+    const unsubs = ["u1", "u2"].map((u) =>
+      subscribeUiEvents(u, (e) => events.push(e))
+    );
+
+    // u2 is the reviewer — they can reject their own queue.
+    const res = await bulkReject(bulkReq([edit.id], await userJwt(2)));
+    expect(res.status).toBe(200);
+    await vi.waitFor(() => expect(events).toHaveLength(2));
+
+    for (const u of ["u1", "u2"]) {
+      const ev = events.find((e) => e.userId === u)!;
+      expect(ev.projectId).toBe(project.id);
+      expect(ev.patch).toMatchObject({
+        type: "pending_edit_changed",
+        fileId: "a.md",
+        edit: null,
+      });
+    }
+    unsubs.forEach((u) => u());
   });
 });
 

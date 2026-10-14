@@ -14,10 +14,16 @@ import { actorFromRequest } from "@/lib/http-auth";
 const HEARTBEAT_MS = 20_000;
 const POLL_MS = 1_000;
 const SENT_IDS_BUDGET = 200;
+const REPLAY_LIMIT = 200;
 
-function sseFrame(event: string, payload: unknown): Uint8Array {
+function sseFrame(
+  event: string,
+  payload: unknown,
+  id?: string
+): Uint8Array {
+  const idLine = id ? `id: ${id}\n` : "";
   return new TextEncoder().encode(
-    `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`
+    `${idLine}event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`
   );
 }
 
@@ -31,6 +37,10 @@ export async function GET(request: Request) {
   const userId = actor.id;
   const url = new URL(request.url);
   const projectFilter = url.searchParams.get("projectId") || "";
+
+  // SSE resume: on reconnect the client sends the id of the last event it
+  // saw; we replay everything persisted after it instead of a blind tail.
+  const lastEventId = request.headers.get("last-event-id") || "";
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -64,7 +74,7 @@ export async function GET(request: Request) {
         if (projectFilter && ev.projectId !== projectFilter) return;
         if (!remember(ev.id)) return;
         lastSeen = Math.max(lastSeen, ev.createdAt);
-        enqueue(sseFrame("ui_patch", ev.patch));
+        enqueue(sseFrame("ui_patch", ev.patch, ev.id));
       };
 
       enqueue(
@@ -75,9 +85,26 @@ export async function GET(request: Request) {
         })
       );
 
-      void listUiEvents(userId, { limit: 20 }).then((events) =>
-        events.forEach(emit)
+      // Resolve the resume cursor: find the referenced event's createdAt so
+  // strictly-newer events replay. Unknown id → fall back to the tail replay.
+      const replay = listUiEvents(userId, { limit: REPLAY_LIMIT }).then(
+        (events) => {
+          let after = 0;
+          let limit = 20;
+          if (lastEventId) {
+            const anchor = events.find((e) => e.id === lastEventId);
+            if (anchor) {
+              after = anchor.createdAt;
+              limit = REPLAY_LIMIT;
+            }
+          }
+          return listUiEvents(userId, {
+            afterCreatedAt: after,
+            limit,
+          });
+        }
       );
+      void replay.then((events) => events.forEach(emit));
 
       const unsubscribe = subscribeUiEvents(userId, emit);
 
