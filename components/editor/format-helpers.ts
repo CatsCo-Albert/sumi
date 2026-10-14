@@ -7,6 +7,64 @@
  */
 
 import type { EditorView } from "@codemirror/view";
+import { syntaxTree } from "@codemirror/language";
+
+/**
+ * Detect whether the cursor/selection sits inside a markdown inline format.
+ * Walks the syntax tree at the selection head and checks ancestor node names.
+ *
+ *   "bold"      → StrongEmphasis
+ *   "italic"    → Emphasis (but NOT inside StrongEmphasis — `**_x_` is bold+italic,
+ *                 we check only the nearest emphasis ancestor)
+ *   "code"      → InlineCode
+ *   "strike"    → Strikethrough (GFM)
+ *   "link"      → Link
+ *   "underline" → HTMLTag containing <u>…</u> (heuristic — checks the line text)
+ */
+export function getActiveFormats(view: EditorView): Set<string> {
+  const out = new Set<string>();
+  const pos = view.state.selection.main.head;
+  let node = syntaxTree(view.state).resolveInner(pos, -1);
+
+  let sawEmphasis = false;
+  let sawStrong = false;
+  while (node) {
+    const name = node.name;
+    if (name === "StrongEmphasis") {
+      out.add("bold");
+      sawStrong = true;
+    } else if (name === "Emphasis") {
+      out.add("italic");
+      sawEmphasis = true;
+    } else if (name === "InlineCode") out.add("code");
+    else if (name === "Strikethrough") out.add("strike");
+    else if (name === "Link" || name === "InlineLink") out.add("link");
+    else if (name === "Blockquote") out.add("quote");
+    else if (name === "FencedCode" || name === "CodeBlock") out.add("codeblock");
+    else if (name === "BulletList" || name === "ListItem") out.add("list");
+    else if (name === "OrderedList") out.add("orderedlist");
+    else if (name.startsWith("ATXHeading")) out.add("heading");
+    node = node.parent as typeof node;
+  }
+
+  // Underline: markdown has no underline — we detect `<u>` HTML inline.
+  // Cheap heuristic: check the current line for <u>…cursor…</u>.
+  if (!sawEmphasis && !sawStrong) {
+    // (no-op; emphasis states are binary on/off anyway)
+  }
+  if (!out.has("underline")) {
+    const line = view.state.doc.lineAt(pos);
+    const text = line.text;
+    const inLine = pos - line.from;
+    const before = text.lastIndexOf("<u>", inLine);
+    const after = text.indexOf("</u>", inLine);
+    if (before !== -1 && after !== -1 && before < inLine && inLine <= after) {
+      out.add("underline");
+    }
+  }
+
+  return out;
+}
 
 /**
  * Wrap the current selection with `prefix`/`suffix` (defaults to a matching

@@ -28,6 +28,7 @@ import DocumentListPane from "@/components/document-list-pane";
 import MarkdownPreview from "@/components/markdown-preview";
 import { Toaster } from "@/components/ui/toast";
 import { useIntentStore } from "@/stores/intent-store";
+import { SettingsDialog, useEditorSettings } from "@/components/settings-dialog";
 import { useDocPersistence } from "@/lib/use-doc-persistence";
 
 export default function WorkspaceShell() {
@@ -146,6 +147,22 @@ function EditorPane({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"outline" | "members">("outline");
   const [askOpen, setAskOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings] = useEditorSettings();
+
+  // Push settings into CSS custom properties — font size flows to CM
+  // via `--sumi-editor-font-size`; theme toggle flips `.dark` class.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.style.setProperty(
+      "--sumi-editor-font-size",
+      `${settings.fontSize}px`
+    );
+    if (settings.theme !== "system") {
+      document.documentElement.classList.toggle("dark", settings.theme === "dark");
+    }
+  }, [settings.fontSize, settings.theme]);
+
   const [askSelection, setAskSelection] = useState<{
     text: string;
     startLine: number;
@@ -354,6 +371,14 @@ function EditorPane({
           >
             大纲
           </button>
+          {/* Settings */}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="编辑器设置"
+            className="rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70 transition-colors hover:text-foreground"
+          >
+            ⚙
+          </button>
           {collaborators.length > 1 && (
             <div className="flex items-center -space-x-1.5">
               {collaborators.slice(0, 5).map((c, i) => (
@@ -481,6 +506,8 @@ function EditorPane({
           if (intent) useIntentStore.getState().upsertIntent(intent);
         }}
       />
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

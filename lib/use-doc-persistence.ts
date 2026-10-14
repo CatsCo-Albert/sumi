@@ -15,8 +15,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { getAuthHeaders } from "@/lib/use-session";
+import { loadSettings } from "@/components/settings-dialog";
 
-const AUTOSAVE_DEBOUNCE_MS = 2_000;
 const SAVE_ENDPOINT = "/api/documents/content";
 
 export interface PersistenceState {
@@ -132,7 +132,9 @@ export function useDocPersistence(
     (content: string) => {
       pendingContent.current = content;
       if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(flush, AUTOSAVE_DEBOUNCE_MS);
+      // Live-read — settings dialog edits apply without reload.
+      const debounce = loadSettings().autosaveDelayMs;
+      saveTimer.current = setTimeout(flush, debounce);
     },
     [flush]
   );

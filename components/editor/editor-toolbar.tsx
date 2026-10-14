@@ -30,6 +30,7 @@ import {
   insertBlock,
   toggleLinePrefix,
   setHeadingLevel,
+  getActiveFormats,
 } from "./format-helpers";
 
 export interface EditorToolbarProps {
@@ -145,12 +146,15 @@ function ToolButton({
   title,
   onRun,
   disabled,
+  active,
   children,
   className,
 }: {
   title: string;
   onRun: () => void;
   disabled?: boolean;
+  /** Mark the button as "format applies at cursor" — primary-tinted bg. */
+  active?: boolean;
   children: ReactNode;
   className?: string;
 }) {
@@ -159,8 +163,14 @@ function ToolButton({
       type="button"
       title={title}
       aria-label={title}
+      aria-pressed={active}
       disabled={disabled}
-      className={cn(BTN, className)}
+      className={cn(
+        BTN,
+        active &&
+          "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+        className
+      )}
       // Don't steal editor focus — action runs on mousedown-safe click.
       onMouseDown={(e) => e.preventDefault()}
       onClick={onRun}
@@ -500,35 +510,75 @@ export function EditorToolbar({
 
   const inOverflow = (i: number) => hiddenGroups.has(i);
 
+  // -- live format-state tracking ------------------------------------------
+  // Recompute which inline formats are active at the cursor on every
+  // doc/selection change. We subscribe via view.updateListener-less polling
+  // through a rAF loop driven by pointer/keyup — cheap enough at this scale.
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(
+    () => new Set()
+  );
+  useEffect(() => {
+    if (!editorView) {
+      setActiveFormats(new Set());
+      return;
+    }
+    const refresh = () => {
+      const next = getActiveFormats(editorView);
+      setActiveFormats((prev) => {
+        if (prev.size === next.size && [...prev].every((x) => next.has(x)))
+          return prev;
+        return next;
+      });
+    };
+    refresh();
+    const dom = editorView.dom;
+    dom.addEventListener("keyup", refresh);
+    dom.addEventListener("mouseup", refresh);
+    // Doc changes also matter (user types `**` — bold state flips)
+    const interval = setInterval(refresh, 500);
+    return () => {
+      dom.removeEventListener("keyup", refresh);
+      dom.removeEventListener("mouseup", refresh);
+      clearInterval(interval);
+    };
+  }, [editorView]);
+
   // -- inline-format group body (shared between bar + overflow menu) -------
   const inlineActions: {
     title: string;
     icon: ReactNode;
+    /** Format token matched against `activeFormats`. */
+    fmt: string;
     run: () => void;
   }[] = [
     {
       title: "加粗 (⌘B)",
       icon: <IconBold className="h-4 w-4" />,
+      fmt: "bold",
       run: () => run(wrapSelectionWith("**")),
     },
     {
       title: "斜体 (⌘I)",
       icon: <IconItalic className="h-4 w-4" />,
+      fmt: "italic",
       run: () => run(wrapSelectionWith("*")),
     },
     {
       title: "下划线 (⌘U)",
       icon: <IconUnderline className="h-4 w-4" />,
+      fmt: "underline",
       run: () => run(wrapSelectionWith("<u>", "</u>")),
     },
     {
       title: "删除线 (⌘⇧X)",
       icon: <IconStrike className="h-4 w-4" />,
+      fmt: "strike",
       run: () => run(wrapSelectionWith("~~")),
     },
     {
       title: "行内代码 (⌘E)",
       icon: <IconInlineCode className="h-4 w-4" />,
+      fmt: "code",
       run: () => run(wrapSelectionWith("`")),
     },
   ];
@@ -575,6 +625,7 @@ export function EditorToolbar({
               key={a.title}
               title={a.title}
               disabled={disabled}
+              active={activeFormats.has(a.fmt)}
               onRun={a.run}
             >
               {a.icon}

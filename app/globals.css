@@ -168,7 +168,7 @@
 /* CodeMirror base styling — minimal chrome */
 .cm-editor {
   height: 100%;
-  font-size: 14px;
+  font-size: var(--sumi-editor-font-size, 14px);
 }
 .cm-editor .cm-content {
   font-family: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
