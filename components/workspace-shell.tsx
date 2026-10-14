@@ -298,6 +298,15 @@ function EditorPane({
     Map<string, { foreground: boolean; fileId?: string }>
   >(new Map());
 
+  // CatsCo contacts — for the "add member" picker
+  const [contacts, setContacts] = useState<
+    Array<{ subjectId: string; displayName: string; username: string; kind: "user" | "agent" }>
+  >([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [addMemberMode, setAddMemberMode] = useState<"picker" | "manual">("picker");
+  const [newMemberId, setNewMemberId] = useState("");
+  const [newMemberRole, setNewMemberRole] = useState<"viewer" | "editor">("editor");
+
   useEffect(() => {
     let cancelled = false;
     fetch(apiPath(`/api/projects/${projectId}/members`), { headers: getAuthHeaders() })
@@ -311,6 +320,56 @@ function EditorPane({
       cancelled = true;
     };
   }, [projectId]);
+
+  // Fetch contacts once when the members tab is opened
+  useEffect(() => {
+    if (sidebarTab !== "members" || !sidebarOpen) return;
+    setContactsLoading(true);
+    fetch(apiPath("/api/friends"), { headers: getAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : { users: [], agents: [] }))
+      .then((d) => {
+        setContacts([...(d.users || []), ...(d.agents || [])]);
+      })
+      .catch(() => {})
+      .finally(() => setContactsLoading(false));
+  }, [sidebarTab, sidebarOpen]);
+
+  const addMember = async (subjectId: string, role: "viewer" | "editor") => {
+    try {
+      const res = await fetch(apiPath(`/api/projects/${projectId}/members`), {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ subjectId, role }),
+      });
+      if (!res.ok) return;
+      // Refresh members
+      const r = await fetch(apiPath(`/api/projects/${projectId}/members`), {
+        headers: getAuthHeaders(),
+      });
+      const d = await r.json();
+      setMembers(d.members || []);
+      // Send the invite — P2P CatsCo message for both users and agents
+      fetch(apiPath("/api/friends"), {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId,
+          kind: subjectId.startsWith("a") ? "agent" : "user",
+          projectId,
+          projectName: undefined, // picked up from the project record server-side
+        }),
+      }).catch(() => {}); // best-effort
+    } catch {
+      /* add failed */
+    }
+  };
+
+  const addMemberManual = async () => {
+    const id = newMemberId.trim();
+    if (!id) return;
+    await addMember(id, newMemberRole);
+    setNewMemberId("");
+  };
 
   // Poll page-state for member presence — refreshes every 10s
   useEffect(() => {
@@ -613,6 +672,16 @@ function EditorPane({
                 collaborators={collaborators}
                 members={members}
                 memberPresence={memberPresence}
+                contacts={contacts}
+                contactsLoading={contactsLoading}
+                addMemberMode={addMemberMode}
+                setAddMemberMode={setAddMemberMode}
+                newMemberId={newMemberId}
+                setNewMemberId={setNewMemberId}
+                newMemberRole={newMemberRole}
+                setNewMemberRole={setNewMemberRole}
+                onAddMember={addMember}
+                onAddMemberManual={addMemberManual}
                 projectId={projectId}
                 fileId={fileId}
               />
@@ -649,6 +718,16 @@ function EditorPane({
                 collaborators={collaborators}
                 members={members}
                 memberPresence={memberPresence}
+                contacts={contacts}
+                contactsLoading={contactsLoading}
+                addMemberMode={addMemberMode}
+                setAddMemberMode={setAddMemberMode}
+                newMemberId={newMemberId}
+                setNewMemberId={setNewMemberId}
+                newMemberRole={newMemberRole}
+                setNewMemberRole={setNewMemberRole}
+                onAddMember={addMember}
+                onAddMemberManual={addMemberManual}
                 projectId={projectId}
                 fileId={fileId}
               />
@@ -721,6 +800,16 @@ function SidePanel({
   collaborators,
   members,
   memberPresence,
+  contacts,
+  contactsLoading,
+  addMemberMode,
+  setAddMemberMode,
+  newMemberId,
+  setNewMemberId,
+  newMemberRole,
+  setNewMemberRole,
+  onAddMember,
+  onAddMemberManual,
   projectId,
   fileId,
 }: {
@@ -733,6 +822,16 @@ function SidePanel({
   collaborators: Array<{ name: string; color: string; id?: string }>;
   members: Array<{ subjectId: string; role: string; status?: string | null; name?: string | null }>;
   memberPresence: Map<string, { foreground: boolean; fileId?: string }>;
+  contacts: Array<{ subjectId: string; displayName: string; username: string; kind: "user" | "agent" }>;
+  contactsLoading: boolean;
+  addMemberMode: "picker" | "manual";
+  setAddMemberMode: (m: "picker" | "manual") => void;
+  newMemberId: string;
+  setNewMemberId: (v: string) => void;
+  newMemberRole: "viewer" | "editor";
+  setNewMemberRole: (r: "viewer" | "editor") => void;
+  onAddMember: (subjectId: string, role: "viewer" | "editor") => void;
+  onAddMemberManual: () => void;
   projectId: string;
   fileId: string;
 }) {
@@ -838,18 +937,109 @@ function SidePanel({
 
       {/* Invite link — copy it, send to friend/agent */}
       <div className="border-t border-border/40 px-3 py-2">
+        {/* Add-member picker */}
+        <div className="mb-2 flex items-center gap-1 rounded-md border border-border/60 p-0.5">
+          <button
+            onClick={() => setAddMemberMode("picker")}
+            className={cn(
+              "rounded px-2 py-0.5 text-[9px] font-medium",
+              addMemberMode === "picker"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground"
+            )}
+          >
+            好友/Bot
+          </button>
+          <button
+            onClick={() => setAddMemberMode("manual")}
+            className={cn(
+              "rounded px-2 py-0.5 text-[9px] font-medium",
+              addMemberMode === "manual"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground"
+            )}
+          >
+            手动
+          </button>
+        </div>
+
+        {addMemberMode === "picker" ? (
+          contactsLoading ? (
+            <div className="text-[10px] text-muted-foreground py-2">载入联系人…</div>
+          ) : contacts.length === 0 ? (
+            <div className="rounded border border-dashed border-border/60 p-2 text-[10px] text-muted-foreground">
+              CatsCo 里先加好友或建 bot
+            </div>
+          ) : (
+            <div className="max-h-40 overflow-auto rounded-md border border-border/60">
+              {contacts
+                .filter((c) => !members.some((m) => m.subjectId === c.subjectId))
+                .map((c) => (
+                  <button
+                    key={c.subjectId}
+                    onClick={() => onAddMember(c.subjectId, "editor")}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-accent/50"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[8px] font-semibold text-white",
+                        c.kind === "agent" ? "bg-violet-500" : "bg-primary"
+                      )}
+                    >
+                      {c.displayName.slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[11px] font-medium">
+                        {c.displayName}
+                      </div>
+                      <div className="truncate text-[9px] text-muted-foreground">
+                        @{c.username}
+                      </div>
+                    </div>
+                    <span className="text-[9px] text-muted-foreground">+ 加入</span>
+                  </button>
+                ))}
+            </div>
+          )
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <input
+              value={newMemberId}
+              onChange={(e) => setNewMemberId(e.target.value)}
+              placeholder="u123 或 a456"
+              className="flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] outline-none focus:ring-1 focus:ring-primary"
+            />
+            <select
+              value={newMemberRole}
+              onChange={(e) => setNewMemberRole(e.target.value as "viewer" | "editor")}
+              className="rounded-md border border-border bg-background px-1.5 py-1 text-[11px] outline-none"
+            >
+              <option value="editor">editor</option>
+              <option value="viewer">viewer</option>
+            </select>
+            <button
+              onClick={onAddMemberManual}
+              disabled={!newMemberId.trim()}
+              className="rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground disabled:opacity-50"
+            >
+              添加
+            </button>
+          </div>
+        )}
+
+        {/* Invite link */}
         <button
           onClick={() => {
             const url = `${window.location.origin}/?invite=${projectId}`;
             void navigator.clipboard.writeText(url);
           }}
-          className="w-full rounded-md border border-border/60 px-2 py-1 text-[10px] font-medium text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+          className="mt-2 w-full rounded-md border border-border/60 px-2 py-1 text-[10px] font-medium text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
           title="复制邀请链接"
         >
           ＋ 复制邀请链接
         </button>
         <div className="mt-1 text-[9px] text-muted-foreground/50">
-          好友点链接 → 自动加入项目
+          好友点链接 → 自动加入项目 · agent 收到 setup prompt
         </div>
       </div>
     </aside>
