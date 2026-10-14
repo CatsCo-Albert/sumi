@@ -51,6 +51,15 @@ export type UiPatch =
       /** Full pending edit payload, or null when removed. */
       edit: unknown | null;
     }
+  | {
+      /** Intent lifecycle events — intent_created / claimed / answered / closed.
+       *  `intent` is the full row; for `closed` only the id may be present. */
+      type: "intent_created" | "intent_claimed" | "intent_answered" | "intent_closed";
+      projectId: string;
+      fileId: string;
+      intent?: unknown;
+      intentId?: string;
+    }
   | { type: "noop" };
 
 // ---------------------------------------------------------------------------

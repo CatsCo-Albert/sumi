@@ -137,6 +137,10 @@ PATCH /api/projects/:id/members { subjectId, status }     — disable/enable an 
 POST /api/projects/:id/assets                            — binary upload (multipart or raw)
 GET  /api/projects/:id/assets?key=…                      — fetch asset (immutable cache)
 DELETE /api/projects/:id/assets {key}
+POST /api/intents              { projectId, fileId, prompt, targetAgentId?, selection? }
+GET  /api/intents?projectId&status&threadId&targetAgentId&fileId
+PATCH /api/intents             { id, status:claimed|answered|closed, answerText?, answerEditId? }
+DELETE /api/intents            { id }                                           (author/owner)
 POST /api/ui/publish           { userId, projectId, patch }
 GET  /api/ui/events                                  → SSE
 ```

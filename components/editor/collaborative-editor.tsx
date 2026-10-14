@@ -99,6 +99,12 @@ export interface CollaborativeEditorProps {
   userImage?: string;
   onEditorReady?: (view: EditorView | null) => void;
   onCursorLineChange?: (line: number) => void;
+  /** Cmd+Shift+I — ask an agent about the current selection / doc. */
+  onAskAgent?: (selection: {
+    text: string;
+    startLine: number;
+    endLine: number;
+  } | null) => void;
   /** TAP ghost-text 补全开关（env gate 之外的用户侧开关）。 */
   tapEnabled?: boolean;
   onConnectionStatusChange?: (status: {
@@ -123,6 +129,7 @@ export default function CollaborativeEditor({
   userImage,
   onEditorReady,
   onCursorLineChange,
+  onAskAgent,
   onConnectionStatusChange,
   tapEnabled = false,
 }: CollaborativeEditorProps) {
@@ -139,6 +146,7 @@ export default function CollaborativeEditor({
   const onContentChangeRef = useRef(onContentChange);
   const onCollaboratorsChangeRef = useRef(onCollaboratorsChange);
   const onCursorLineChangeRef = useRef(onCursorLineChange);
+  const onAskAgentRef = useRef(onAskAgent);
   const onConnectionStatusChangeRef = useRef(onConnectionStatusChange);
   const onEditorReadyRef = useRef(onEditorReady);
   const initialContentRef = useRef(initialContent);
@@ -148,6 +156,7 @@ export default function CollaborativeEditor({
     onContentChangeRef.current = onContentChange;
     onCollaboratorsChangeRef.current = onCollaboratorsChange;
     onCursorLineChangeRef.current = onCursorLineChange;
+    onAskAgentRef.current = onAskAgent;
     onConnectionStatusChangeRef.current = onConnectionStatusChange;
     onEditorReadyRef.current = onEditorReady;
     initialContentRef.current = initialContent;
@@ -319,6 +328,23 @@ export default function CollaborativeEditor({
           { key: "Mod-u", run: wrap("<u>", "</u>"), preventDefault: true },
           { key: "Mod-Shift-x", run: wrap("~~"), preventDefault: true },
           { key: "Mod-e", run: wrap("`"), preventDefault: true },
+          {
+            key: "Mod-Shift-i",
+            run: (view) => {
+              if (!onAskAgentRef.current) return false;
+              const sel = view.state.selection.main;
+              if (sel.empty) {
+                onAskAgentRef.current(null);
+              } else {
+                const text = view.state.doc.sliceString(sel.from, sel.to);
+                const startLine = view.state.doc.lineAt(sel.from).number;
+                const endLine = view.state.doc.lineAt(sel.to).number;
+                onAskAgentRef.current({ text, startLine, endLine });
+              }
+              return true;
+            },
+            preventDefault: true,
+          },
         ]),
 
         languageCompartment.of(languageExtensions),

@@ -147,6 +147,71 @@ def cmd_heartbeat(a: argparse.Namespace) -> None:
     _pp(_req("GET", "/api/auth/me"))
 
 
+def cmd_intents(a: argparse.Namespace) -> None:
+    qs = f"projectId={urllib.request.quote(a.project)}"
+    if a.status:
+        qs += f"&status={a.status}"
+    if a.mine:
+        # Get my subject id first
+        me = _req("GET", "/api/auth/me")
+        aid = me.get("actor", {}).get("id")
+        if aid:
+            qs += f"&targetAgentId={aid}"
+    if a.thread:
+        qs += f"&threadId={urllib.request.quote(a.thread)}"
+    r = _req("GET", f"/api/intents?{qs}")
+    if a.compact:
+        for i in r.get("intents", []):
+            sel = (
+                f"L{i['selectionStart']}-{i['selectionEnd']}"
+                if i.get("selectionStart")
+                else ""
+            )
+            print(
+                f"[{i['status']:8s}] {i['id']}  {i['fileId']} {sel}  "
+                f"{(i.get('prompt') or '')[:60]}"
+            )
+    else:
+        _pp(r)
+
+
+def cmd_create_intent(a: argparse.Namespace) -> None:
+    body: dict = {
+        "projectId": a.project,
+        "fileId": a.file,
+        "prompt": a.prompt,
+    }
+    if a.agent:
+        body["targetAgentId"] = a.agent
+    if a.thread:
+        body["threadId"] = a.thread
+    if a.start is not None and a.end is not None:
+        body["selectionStart"] = a.start
+        body["selectionEnd"] = a.end
+    if a.selection:
+        body["selectionText"] = a.selection
+    _pp(_req("POST", "/api/intents", body))
+
+
+def cmd_claim_intent(a: argparse.Namespace) -> None:
+    _pp(_req("PATCH", "/api/intents", {"id": a.id, "status": "claimed"}))
+
+
+def cmd_answer_intent(a: argparse.Namespace) -> None:
+    body: dict = {"id": a.id, "status": "answered"}
+    if a.text:
+        body["answerText"] = a.text
+    if a.edit:
+        body["answerEditId"] = a.edit
+    if not a.text and not a.edit:
+        raise SystemExit("answer-intent needs --text and/or --edit")
+    _pp(_req("PATCH", "/api/intents", body))
+
+
+def cmd_close_intent(a: argparse.Namespace) -> None:
+    _pp(_req("PATCH", "/api/intents", {"id": a.id, "status": "closed"}))
+
+
 def cmd_watch(a: argparse.Namespace) -> None:
     """
     SSE subscription — stream pending_edit_changed + other UiPatch events
@@ -250,6 +315,30 @@ def main() -> None:
     s = sub.add_parser("reject-edit"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_reject_edit)
     s = sub.add_parser("get-onboard-prompt"); s.add_argument("--project", required=True); s.add_argument("--file"); s.add_argument("--raw", action="store_true"); s.set_defaults(fn=cmd_onboard)
     s = sub.add_parser("heartbeat"); s.set_defaults(fn=cmd_heartbeat)
+    s = sub.add_parser("intents")
+    s.add_argument("--project", required=True)
+    s.add_argument("--status", choices=["open","claimed","answered","closed"])
+    s.add_argument("--mine", action="store_true", help="only intents targeted at me")
+    s.add_argument("--thread", help="filter by threadId")
+    s.add_argument("--compact", action="store_true", help="one line per intent")
+    s.set_defaults(fn=cmd_intents)
+    s = sub.add_parser("create-intent")
+    s.add_argument("--project", required=True)
+    s.add_argument("--file", required=True)
+    s.add_argument("--prompt", required=True)
+    s.add_argument("--agent", help="target agent subject id (a*)")
+    s.add_argument("--start", type=int, help="selection start line")
+    s.add_argument("--end", type=int, help="selection end line")
+    s.add_argument("--selection", help="snapshot of selected text")
+    s.add_argument("--thread", help="threadId for follow-ups")
+    s.set_defaults(fn=cmd_create_intent)
+    s = sub.add_parser("claim-intent"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_claim_intent)
+    s = sub.add_parser("answer-intent")
+    s.add_argument("--id", required=True)
+    s.add_argument("--text", help="plain-text answer")
+    s.add_argument("--edit", help="pending_edit id if answered via an edit")
+    s.set_defaults(fn=cmd_answer_intent)
+    s = sub.add_parser("close-intent"); s.add_argument("--id", required=True); s.set_defaults(fn=cmd_close_intent)
     s = sub.add_parser("watch")
     s.add_argument("--project", help="filter events to this projectId")
     s.add_argument("--json", action="store_true", help="pretty-print JSON instead of one-liner")

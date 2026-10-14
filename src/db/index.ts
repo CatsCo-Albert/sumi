@@ -121,6 +121,44 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
       ALTER TABLE projects ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 6,
+    sql: `
+      -- Intents — agent-task requests anchored to a doc region.
+      -- A human (or another agent) creates an intent targeting an agent
+      -- subject (target_agent_id). The agent sees it via SSE broadcast
+      -- (intent_created), answers via POST /api/intents/:id/answer, and
+      -- its reply is stored + broadcast (intent_answered). Optionally
+      -- the agent attaches a pending_edit_id when its response is an edit.
+      CREATE TABLE IF NOT EXISTS intents (
+        id               TEXT PRIMARY KEY,          -- "int_<ts>_<rand>"
+        project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        file_id          TEXT NOT NULL,
+        selection_start  INTEGER,                   -- 1-based inclusive line
+        selection_end    INTEGER,
+        selection_text   TEXT,                      -- snapshot of the selected text
+        prompt           TEXT NOT NULL,
+        author_id        TEXT NOT NULL,             -- who asked
+        author_name      TEXT,
+        target_agent_id  TEXT,                      -- "a*" subject, NULL = broadcast to all agents
+        thread_id        TEXT,                      -- multi-turn conversation id
+        status           TEXT NOT NULL CHECK (status IN ('open','claimed','answered','closed'))
+                         DEFAULT 'open',
+        answer_text      TEXT,
+        answer_edit_id   TEXT,                      -- pending_edit.id if answered via an edit
+        answered_by      TEXT,
+        created_at       INTEGER NOT NULL,
+        claimed_at       INTEGER,
+        answered_at      INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_intents_scope
+        ON intents(project_id, file_id, status);
+      CREATE INDEX IF NOT EXISTS idx_intents_thread
+        ON intents(thread_id);
+      CREATE INDEX IF NOT EXISTS idx_intents_target
+        ON intents(target_agent_id, status);
+    `,
+  },
 ];
 
 export async function getDb(): Promise<DatabaseSync> {

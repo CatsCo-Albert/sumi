@@ -13,11 +13,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EditorView } from "@codemirror/view";
-import { useSession } from "@/lib/use-session";
+import { useSession, getAuthHeaders } from "@/lib/use-session";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
+import { AskAgentDialog } from "@/components/ask-agent-dialog";
 import EditCommandBar from "@/components/editor/edit-command-bar";
 import { useEditStore } from "@/stores/edit-store";
 import DocumentListPane from "@/components/document-list-pane";
@@ -134,6 +135,15 @@ function EditorPane({
   const [viewMode, setViewMode] = useState<EditorViewMode>("source");
   const [tapEnabled, setTapEnabled] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
+  const [askOpen, setAskOpen] = useState(false);
+  const [askSelection, setAskSelection] = useState<{
+    text: string;
+    startLine: number;
+    endLine: number;
+  } | null>(null);
+  const [agents, setAgents] = useState<
+    Array<{ subjectId: string; name: string | null }>
+  >([]);
   const editorViewRef = useRef<EditorView | null>(null);
   const applyUiPatch = useUiStore((s) => s.applyUiPatch);
   const { initialContent, loading, scheduleSave, lastSavedAt, error, conflicted } =
@@ -142,6 +152,31 @@ function EditorPane({
   const handleContentChange = (content: string) => {
     setCurrentContent(content);
     scheduleSave(content);
+  };
+
+  // Load agent members for the ask-agent dialog target picker.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/members`, { headers: getAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : { members: [] }))
+      .then((d) => {
+        if (cancelled) return;
+        const list = (d.members || []).filter(
+          (m: any) => m.subjectId?.startsWith("a") && m.status !== "disabled"
+        );
+        setAgents(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const handleAskAgent = (
+    sel: { text: string; startLine: number; endLine: number } | null
+  ) => {
+    setAskSelection(sel);
+    setAskOpen(true);
   };
 
   // Cmd+K — grab current selection, push it into the AI dock as a prompt.
@@ -309,6 +344,7 @@ function EditorPane({
                 onContentChange={handleContentChange}
                 onCollaboratorsChange={setCollaborators}
                 onEditorReady={(v) => (editorViewRef.current = v)}
+                onAskAgent={handleAskAgent}
               />
             </div>
             <div className="flex-1 overflow-auto bg-background">
@@ -328,9 +364,21 @@ function EditorPane({
             onContentChange={handleContentChange}
             onCollaboratorsChange={setCollaborators}
             onEditorReady={(v) => (editorViewRef.current = v)}
+            onAskAgent={handleAskAgent}
           />
         )}
       </div>
+
+      {/* Cmd+Shift+I — ask agent about selection */}
+      <AskAgentDialog
+        open={askOpen}
+        projectId={projectId}
+        fileId={fileId}
+        selection={askSelection}
+        agents={agents}
+        onClose={() => setAskOpen(false)}
+        onCreated={() => {}}
+      />
     </div>
   );
 }
