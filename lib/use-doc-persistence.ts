@@ -19,7 +19,7 @@ import { getAuthHeaders } from "@/lib/use-session";
 import { loadSettings } from "@/components/settings-dialog";
 import { useUiStore } from "@/stores/ui-store";
 
-const SAVE_ENDPOINT = "/api/documents/content";
+const SAVE_ENDPOINT = apiPath("/api/documents/content");
 
 export interface PersistenceState {
   /** Loaded once from canonical storage — pass to `initialContent`. */
