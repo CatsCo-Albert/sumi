@@ -41,29 +41,31 @@ async function actorAndRole(
   return { actor, role };
 }
 
-/** Notify the reviewer that an edit changed. Fire-and-forget. */
-function notifyReviewer(
+/** Notify all project members — humans AND agents. Fire-and-forget. */
+function notifyProjectMembers(
+  db: Awaited<ReturnType<typeof getDb>>,
   projectId: string,
   fileId: string,
-  reviewerId: string,
   edit: ReturnType<typeof getPendingEdit>,
   source: "internal_agent" | "external_agent" | "system"
 ): void {
   void (async () => {
-    // Only broadcast to the reviewer's ui-bus — the pending queue is per-user.
-    // If the reviewer is offline, the durable log replays on reconnect.
-    if (!reviewerId.startsWith("u")) return;
-    await publishUiPatch({
-      userId: reviewerId,
-      projectId,
-      patch: {
-        type: "pending_edit_changed",
+    const members = db
+      .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
+      .all(projectId) as { subject_id: string }[];
+    for (const m of members) {
+      await publishUiPatch({
+        userId: m.subject_id,
         projectId,
-        fileId,
-        edit,
-      },
-      source,
-    });
+        patch: {
+          type: "pending_edit_changed",
+          projectId,
+          fileId,
+          edit,
+        },
+        source,
+      });
+    }
   })();
 }
 
@@ -183,9 +185,10 @@ export async function POST(request: Request) {
     blocks: enrichedBlocks,
   });
 
-  // Notify the reviewer — their editor will render the diff decorations.
+  // Broadcast to every project member — humans see decorations,
+  // agents can poll or SSE-subscribe for notifications.
   for (const edit of created) {
-    notifyReviewer(projectId, fileId, reviewer, edit, "external_agent");
+    notifyProjectMembers(db, projectId, fileId, edit, "external_agent");
   }
 
   return Response.json({ edits: created }, { status: 201 });
@@ -219,7 +222,7 @@ export async function DELETE(request: Request) {
   }
 
   updatePendingEditStatus(db, editId, "rejected");
-  notifyReviewer(existing.projectId, existing.fileId, existing.userId, null, "system");
+  notifyProjectMembers(db, existing.projectId, existing.fileId, null, "system");
 
   return Response.json({ ok: true });
 }

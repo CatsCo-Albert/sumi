@@ -43,6 +43,20 @@ sumi pending-status --project prj_x     # one-line summary per block
 
 Status values: `pending` | `applying` | `applied` | `rejected`
 
+### Subscribe to live updates (recommended for long-running agents)
+
+```bash
+sumi watch --project prj_x              # SSE stream, auto-reconnect
+sumi watch --project prj_x --compact    # drop ping frames
+sumi watch --project prj_x --json       # pretty-printed JSON
+```
+
+Emits `ui_patch` events. Useful `patch.type` values:
+- `pending_edit_changed` — a human/agent proposed, applied, or rejected an edit
+- `doc_renamed`, `member_changed`, etc.
+
+Keep the process alive in a background shell while you work; check `list-pending` for the full state when you wake up — SSE is a notification, not a ledger.
+
 ### Apply or reject (usually human-only)
 
 ```bash

@@ -8,6 +8,7 @@
 import { actorFromRequest } from "@/lib/http-auth";
 import { getDb } from "@/src/db";
 import { projectRoleFor } from "@/src/auth/actor";
+import { publishUiPatch } from "@/src/ui-bus/event-bus";
 import crypto from "crypto";
 
 const WS_PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT, 10) : 1234;
@@ -63,8 +64,30 @@ export async function POST(request: Request) {
 
     // Mark the pending edit as applied (best-effort — UI already updated).
     if (editId) {
-      const { updatePendingEditStatus } = await import("@/src/pending-edits");
+      const { updatePendingEditStatus, getPendingEdit } = await import(
+        "@/src/pending-edits"
+      );
       updatePendingEditStatus(db, editId, "applied");
+
+      // Broadcast to all project members — humans see the diff disappear,
+      // agents get the applied event via SSE.
+      const appliedEdit = getPendingEdit(db, editId);
+      const members = db
+        .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
+        .all(projectId) as { subject_id: string }[];
+      for (const m of members) {
+        void publishUiPatch({
+          userId: m.subject_id,
+          projectId,
+          patch: {
+            type: "pending_edit_changed",
+            projectId,
+            fileId: filePath,
+            edit: appliedEdit,
+          },
+          source: "system",
+        });
+      }
     }
 
     return Response.json({ ok: true, roomName: `${projectId}-${filePath}` });
