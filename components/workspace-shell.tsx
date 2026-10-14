@@ -54,17 +54,6 @@ export default function WorkspaceShell() {
     setCurrentDocumentId(documentId);
   }, [documentId, setCurrentDocumentId]);
 
-  // Broadcast page state to all active Yjs providers so other clients
-  // (humans + agents) can see where we are. Runs on every UI change.
-  useEffect(() => {
-    broadcastPageState({
-      currentDocumentId,
-      activeMainBlock,
-      panelVisibility,
-      panelWidth,
-    });
-  }, [currentDocumentId, activeMainBlock, panelVisibility, panelWidth]);
-
   // Flash the attention target briefly, then clear
   useEffect(() => {
     if (!attentionSignal) return;
@@ -76,6 +65,22 @@ export default function WorkspaceShell() {
   const attentionTarget = attentionSignal?.target;
 
   const { actor, loading } = useSession();
+
+  // Broadcast page state to all active Yjs providers so other clients
+  // (humans + agents) can see where we are + what we can do.
+  useEffect(() => {
+    broadcastPageState({
+      currentDocumentId,
+      activeMainBlock,
+      aiOpen: panelVisibility.ai,
+      sidebarOpen: panelVisibility.sidebar,
+      inspectorOpen: panelVisibility.inspector,
+      role: (actor as { projectRole?: string } | null)?.projectRole,
+      activePendingEdits: useEditStore.getState().pendingEdits.map(e => e.id),
+      selection: undefined, // wire up when CM selection tracking lands
+      cursorLine: undefined,
+    });
+  }, [currentDocumentId, activeMainBlock, panelVisibility, actor]);
 
   const [aiProjectId, aiFileId] = currentDocumentId
     ? splitDocId(currentDocumentId)

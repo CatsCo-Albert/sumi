@@ -27,10 +27,24 @@ export function listProviders(): Array<{ roomName: string; provider: WebsocketPr
 
 /** Broadcast pageState to all active providers. */
 export function broadcastPageState(pageState: {
+  /** Doc the user has open (null = file tree / management). */
   currentDocumentId: string | null;
+  /** Which main block is focused. */
   activeMainBlock: string;
-  panelVisibility: Record<string, boolean>;
-  panelWidth: Record<string, number>;
+  /** AI panel visibility. */
+  aiOpen: boolean;
+  /** Sidebar visibility. */
+  sidebarOpen: boolean;
+  /** Inspector visibility. */
+  inspectorOpen: boolean;
+  /** User's effective role on the project (editor|viewer|owner). */
+  role?: string;
+  /** Pending-edit IDs currently visible as inline diff decorations. */
+  activePendingEdits?: string[];
+  /** Line range the user last selected (for contextual intents). */
+  selection?: { startLine: number; endLine: number };
+  /** Cursor position (line). */
+  cursorLine?: number;
 }) {
   providers.forEach((provider) => {
     try {
