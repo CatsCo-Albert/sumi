@@ -62,10 +62,18 @@ export default function WorkspaceShell() {
     return () => clearTimeout(t);
   }, [attentionSignal, consumeAttention]);
 
-  const aiOpen = panelVisibility.ai;
-  const attentionTarget = attentionSignal?.target;
-
   const { actor, loading } = useSession();
+
+  // Esc → back to document list (when a doc is open; dialogs handle their own Esc)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && currentDocumentId) {
+        setCurrentDocumentId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [currentDocumentId, setCurrentDocumentId]);
 
   // Broadcast page state to all active Yjs providers so other clients
   // (humans + agents) can see where we are + what we can do.
@@ -82,6 +90,9 @@ export default function WorkspaceShell() {
       cursorLine: undefined,
     });
   }, [currentDocumentId, activeMainBlock, panelVisibility, actor]);
+
+  const aiOpen = panelVisibility.ai;
+  const attentionTarget = attentionSignal?.target;
 
   const [aiProjectId, aiFileId] = currentDocumentId
     ? splitDocId(currentDocumentId)
@@ -155,6 +166,7 @@ function EditorPane({
   attention: boolean;
   actor: { id: string; name: string; kind: "user" | "agent" };
 }) {
+  const setCurrentDocumentId = useUiStore((s) => s.setCurrentDocumentId);
   const router = useRouter();
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
@@ -345,6 +357,14 @@ function EditorPane({
     >
       {/* Title bar — hairline separator, minimal chrome */}
       <header className="flex h-11 items-center gap-3 border-b border-border/60 px-4">
+        {/* Back to file list — Esc also works */}
+        <button
+          onClick={() => setCurrentDocumentId(null)}
+          title="回到文档列表 (Esc)"
+          className="rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+        >
+          ←
+        </button>
         <div className="text-[13px] font-medium text-muted-foreground">
           {fileId.split("/").pop() || fileId}
         </div>
