@@ -119,40 +119,44 @@ export async function POST(request: Request) {
   const { subjectId, kind, projectId, projectName } = body;
 
   if (kind === "user") {
-    // -- Send the friend a link to Sumi via CatsCo's messaging ----------
+    // -- Send the friend a P2P CatsCo message with the Sumi link ------
     const shareUrl = `${process.env.NEXT_PUBLIC_SUMI_URL || "http://localhost:3000"}/?invite=${encodeURIComponent(
       subjectId
     )}${projectId ? `&project=${encodeURIComponent(projectId)}` : ""}`;
 
-    const res = await fetch(`${CATSCO_BASE_URL}/api/notifications`, {
+    // CatsCo P2P topic: p2p_{smaller_uid}_{larger_uid}
+    const myUid = actor.uid;
+    const friendUid = Number(subjectId.slice(1)); // strip 'u' prefix
+    const [a, b] = myUid < friendUid ? [myUid, friendUid] : [friendUid, myUid];
+    const topicId = `p2p_${a}_${b}`;
+
+    const res = await fetch(`${CATSCO_BASE_URL}/api/messages/send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        to: subjectId,
-        type: "share_link",
-        payload: {
-          app: "Sumi",
-          url: shareUrl,
-          message: `${actor.name} 邀请你加入 Sumi 项目「${projectName || projectId || "一个项目"}」`,
-        },
+        topic_id: topicId,
+        msg_type: "markdown",
+        content: `**${actor.name}** 邀请你加入 Sumi 项目「${projectName || projectId || "一个项目"}」
+
+🔗 ${shareUrl}`,
       }),
     });
     if (!res.ok) {
       return Response.json(
-        { error: `cats-co push failed (${res.status})` },
+        { error: `cats-co message failed (${res.status})` },
         { status: 502 }
       );
     }
-    return Response.json({ ok: true, type: "link", url: shareUrl });
+    return Response.json({ ok: true, type: "p2p_message", topicId });
   }
 
   if (kind === "agent") {
-    // -- Send the bot a setup prompt — the bot's owner reads it in CatsCo
-    // and pastes it into their agent runtime. The prompt tells the bot to
-    // install sumi-kit, set env vars, and connect.
+    // -- Send the bot a setup prompt via CatsCo P2P message — the bot's
+    // owner reads it in CatsCo chat and pastes it into their agent runtime.
+    // The prompt tells the bot to install sumi-kit, set env vars, and connect.
     const setupUrl = `${process.env.NEXT_PUBLIC_SUMI_URL || "http://localhost:3000"}/api/projects/${projectId}/agent-setup?fileId=README.md`;
 
     const prompt = `# Sumi 协作 — agent 接入指南
@@ -182,29 +186,31 @@ curl -H "Authorization: Bearer $SUMI_API_KEY" "${setupUrl}" | jq -r .instruction
 \`\`\`
 `;
 
-    const res = await fetch(`${CATSCO_BASE_URL}/api/notifications`, {
+    // CatsCo P2P topic: p2p_{smaller_uid}_{larger_uid}
+    const myUid = actor.uid;
+    const botUid = Number(subjectId.slice(1)); // strip 'a' prefix
+    const [a, b] = myUid < botUid ? [myUid, botUid] : [botUid, myUid];
+    const topicId = `p2p_${a}_${b}`;
+
+    const res = await fetch(`${CATSCO_BASE_URL}/api/messages/send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        to: subjectId,
-        type: "agent_onboard",
-        payload: {
-          app: "Sumi",
-          projectId,
-          instructions: prompt,
-        },
+        topic_id: topicId,
+        msg_type: "markdown",
+        content: prompt,
       }),
     });
     if (!res.ok) {
       return Response.json(
-        { error: `cats-co push failed (${res.status})` },
+        { error: `cats-co message failed (${res.status})` },
         { status: 502 }
       );
     }
-    return Response.json({ ok: true, type: "prompt", subjectId });
+    return Response.json({ ok: true, type: "p2p_message", topicId });
   }
 
   return Response.json({ error: "invalid kind" }, { status: 400 });
