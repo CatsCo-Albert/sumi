@@ -69,6 +69,7 @@ import {
   type RemoteLockInfo,
 } from "./pending-edit-lock-extension";
 import { tapExtension } from "./tap-completion";
+import { wrapSelectionWith } from "./format-helpers";
 import { useEditStore } from "@/stores/edit-store";
 
 export type EditorMode = "markdown" | "html";
@@ -323,11 +324,11 @@ export default function CollaborativeEditor({
 
         // Apple-grade markdown formatting shortcuts
         keymap.of([
-          { key: "Mod-b", run: wrap("**"), preventDefault: true },
-          { key: "Mod-i", run: wrap("*"), preventDefault: true },
-          { key: "Mod-u", run: wrap("<u>", "</u>"), preventDefault: true },
-          { key: "Mod-Shift-x", run: wrap("~~"), preventDefault: true },
-          { key: "Mod-e", run: wrap("`"), preventDefault: true },
+          { key: "Mod-b", run: wrapSelectionWith("**"), preventDefault: true },
+          { key: "Mod-i", run: wrapSelectionWith("*"), preventDefault: true },
+          { key: "Mod-u", run: wrapSelectionWith("<u>", "</u>"), preventDefault: true },
+          { key: "Mod-Shift-x", run: wrapSelectionWith("~~"), preventDefault: true },
+          { key: "Mod-e", run: wrapSelectionWith("`"), preventDefault: true },
           {
             key: "Mod-Shift-i",
             run: (view) => {
@@ -497,31 +498,8 @@ export default function CollaborativeEditor({
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Wrap the current selection (or insert empty pair) with prefix/suffix. */
-function wrap(pair: string, closingOverride?: string) {
-  const closing = closingOverride ?? pair;
-  return (view: EditorView): boolean => {
-    const { state } = view;
-    const sel = state.selection.main;
-    if (sel.empty) {
-      const pos = sel.from;
-      view.dispatch({
-        changes: { from: pos, insert: pair + closing },
-        selection: { anchor: pos + pair.length },
-      });
-    } else {
-      const text = state.sliceDoc(sel.from, sel.to);
-      view.dispatch({
-        changes: { from: sel.from, to: sel.to, insert: pair + text + closing },
-        selection: {
-          anchor: sel.from + pair.length,
-          head: sel.from + pair.length + text.length,
-        },
-      });
-    }
-    return true;
-  };
-}
+/** Wrap the current selection (or insert empty pair) — see format-helpers.ts. */
+const wrap = wrapSelectionWith;
 
 // Small placeholders to keep imports tidy (CM requires these as extensions).
 function rectangularSelectionPlaceholder() {

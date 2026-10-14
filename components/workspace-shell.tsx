@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
+import { EditorToolbar } from "@/components/editor/editor-toolbar";
 import { AskAgentDialog } from "@/components/ask-agent-dialog";
 import EditCommandBar from "@/components/editor/edit-command-bar";
 import { useEditStore } from "@/stores/edit-store";
@@ -132,6 +133,7 @@ function EditorPane({
   const router = useRouter();
   const [projectId, fileId] = splitDocId(documentId);
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
+  const [connStatus, setConnStatus] = useState({ isConnected: false, isSynced: false });
   const [viewMode, setViewMode] = useState<EditorViewMode>("source");
   const [tapEnabled, setTapEnabled] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
@@ -145,9 +147,17 @@ function EditorPane({
     Array<{ subjectId: string; name: string | null }>
   >([]);
   const editorViewRef = useRef<EditorView | null>(null);
+  // State mirror of the ref — the toolbar needs a reactive value to
+  // enable/disable buttons once the CM view mounts.
+  const [editorView, setEditorView] = useState<EditorView | null>(null);
   const applyUiPatch = useUiStore((s) => s.applyUiPatch);
   const { initialContent, loading, scheduleSave, lastSavedAt, error, conflicted } =
     useDocPersistence(projectId, fileId);
+
+  const handleEditorReady = (v: EditorView | null) => {
+    editorViewRef.current = v;
+    setEditorView(v);
+  };
 
   const handleContentChange = (content: string) => {
     setCurrentContent(content);
@@ -285,21 +295,6 @@ function EditorPane({
         </div>
         {/* Live collaborators — colored dots + tooltip name */}
         <div className="ml-auto flex items-center gap-2">
-          {/* TAP ghost-text 补全开关 */}
-          {TAP_AVAILABLE && (
-            <button
-              onClick={() => setTapEnabled((v) => !v)}
-              title={tapEnabled ? "关闭 TAP 补全" : "开启 TAP 补全"}
-              className={cn(
-                "rounded-md border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide transition-colors",
-                tapEnabled
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border/60 text-muted-foreground/70 hover:text-foreground"
-              )}
-            >
-              TAP
-            </button>
-          )}
           {collaborators.length > 1 && (
             <div className="flex items-center -space-x-1.5">
               {collaborators.slice(0, 5).map((c, i) => (
@@ -319,6 +314,22 @@ function EditorPane({
           </div>
         </div>
       </header>
+      {/* Formatting toolbar — sits between the file header and the editor,
+          hidden in pure preview mode where there's no CodeMirror surface. */}
+      {viewMode !== "preview" && (
+        <EditorToolbar
+          editorView={editorView}
+          projectId={projectId}
+          fileId={fileId}
+          isConnected={connStatus.isConnected}
+          isSynced={connStatus.isSynced}
+          collaboratorCount={collaborators.length}
+          tapAvailable={TAP_AVAILABLE}
+          tapEnabled={tapEnabled}
+          onTapToggle={() => setTapEnabled((v) => !v)}
+          onAskAgent={() => handleAskAgent(null)}
+        />
+      )}
       <div className="relative flex-1 overflow-hidden">
         {/* Cursor-style pending-edit command bar (overlays editor) */}
         <EditCommandBar />
@@ -343,8 +354,9 @@ function EditorPane({
                 tapEnabled={tapEnabled}
                 onContentChange={handleContentChange}
                 onCollaboratorsChange={setCollaborators}
-                onEditorReady={(v) => (editorViewRef.current = v)}
+                onEditorReady={handleEditorReady}
                 onAskAgent={handleAskAgent}
+                onConnectionStatusChange={setConnStatus}
               />
             </div>
             <div className="flex-1 overflow-auto bg-background">
@@ -363,8 +375,9 @@ function EditorPane({
             tapEnabled={tapEnabled}
             onContentChange={handleContentChange}
             onCollaboratorsChange={setCollaborators}
-            onEditorReady={(v) => (editorViewRef.current = v)}
+            onEditorReady={handleEditorReady}
             onAskAgent={handleAskAgent}
+            onConnectionStatusChange={setConnStatus}
           />
         )}
       </div>
