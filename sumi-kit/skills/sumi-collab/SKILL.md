@@ -17,16 +17,22 @@ Direct full-document writes (`PUT /api/documents/content`) are reserved for bran
 ### Co-edit a file locally (recommended for long sessions)
 
 ```bash
+# Option A — daemon mode (litewrite-style): Sumi host watches a dir,
+# every file = a synced doc. True bidirectional, 1s latency.
+cd sumi && pnpm co-edit-daemon --dir /tmp/sumi-workspace --project prj_x \
+  --ws ws://localhost:12345 --api-key cc_xxx
+# Then just read/write files in /tmp/sumi-workspace/
+
+# Option B — CLI polling (lighter): one file, 2s sync
 sumi co-edit --project prj_x --file notes/intro.md --local /tmp/work.md
-# local ↔ remote syncs every 2s — you read/write /tmp/work.md,
-# Sumi turns every save into a pending-edit proposal
 ```
 
-**When to use co-edit vs propose-edit:**
-- `co-edit` — you want a live read-write copy on disk, iterate locally, push changes as pending edits
+**When to use which:**
+- `co-edit-daemon` — long-running session, many docs, want true realtime
+- `co-edit` — quick task, one doc, don't want to leave a daemon running
 - `propose-edit` — one-shot targeted change; you compute the diff yourself
 
-`co-edit` initial pull: if `--local` is empty, remote fills it; if `--local` has content, it pushes once as a pending edit. Then it polls every `--interval` seconds (default 2) in both directions.
+`co-edit`/`co-edit-daemon` both push via `pending-edit` — human sees the diff, keeps control.
 
 ### Read a document
 

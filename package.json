@@ -11,6 +11,7 @@
     "start": "next start",
     "ws-server": "tsx src/server/ws-server.ts",
     "ws-dev": "tsx watch src/server/ws-server.ts",
+    "co-edit-daemon": "tsx src/server/co-edit-daemon.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
