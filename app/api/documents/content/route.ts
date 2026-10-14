@@ -51,12 +51,14 @@ export async function GET(request: Request) {
     return Response.json({ content: "", exists: false, contentHash: null });
   }
   const buf = await storage.download(key);
-  const info = await storage.list(docKey(projectId, filePath));
+  // `stat`, not `list`: list walks a directory, so passing it a file made
+  // readdir throw ENOTDIR and the load returned 500.
+  const info = await storage.stat(key);
   return Response.json({
     content: buf.toString("utf8"),
     exists: true,
     contentHash: hashContent(buf),
-    updatedAt: info[0]?.lastModified.toISOString(),
+    updatedAt: info?.lastModified.toISOString(),
   });
 }
 

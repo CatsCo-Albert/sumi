@@ -59,9 +59,11 @@ export async function GET(
   const fileId =
     url.searchParams.get("fileId") || "notes/intro.md";
 
-  // Best-guess WS URL — clients should override via env.
+  // Best-guess WS URL — clients should override via env. Reads the same
+  // NEXT_PUBLIC_WS_URL the browser editor resolves in lib/utils.ts, so the
+  // onboarding string and the UI never point at different endpoints.
   const wsBaseUrl =
-    process.env.NEXT_PUBLIC_SUMI_WS_URL ||
+    process.env.NEXT_PUBLIC_WS_URL ||
     `ws://localhost:${process.env.WS_PORT || 12345}`;
   const httpBaseUrl =
     process.env.NEXT_PUBLIC_SUMI_HTTP_URL || "http://localhost:3000";

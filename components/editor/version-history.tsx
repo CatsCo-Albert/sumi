@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { apiPath } from "@/lib/api-path";
 import { getAuthHeaders } from "@/lib/use-session";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -175,7 +176,9 @@ export default function VersionHistory({
     if (!projectId || !fileId) return;
     setLoading(true);
     fetch(
-      `/api/projects/${projectId}/versions?fileId=${encodeURIComponent(fileId)}`,
+      apiPath(
+        `/api/projects/${projectId}/versions?fileId=${encodeURIComponent(fileId)}`
+      ),
       { headers: getAuthHeaders() }
     )
       .then((r) => (r.ok ? r.json() : { versions: [] }))
@@ -198,7 +201,9 @@ export default function VersionHistory({
       if (detail[id] !== undefined) return detail[id];
       try {
         const r = await fetch(
-          `/api/projects/${projectId}/versions?fileId=${encodeURIComponent(fileId)}&id=${encodeURIComponent(id)}`,
+          apiPath(
+            `/api/projects/${projectId}/versions?fileId=${encodeURIComponent(fileId)}&id=${encodeURIComponent(id)}`
+          ),
           { headers: getAuthHeaders() }
         );
         if (!r.ok) return null;
@@ -238,7 +243,7 @@ export default function VersionHistory({
   const restore = async (id: string) => {
     setBusy(true);
     try {
-      const r = await fetch(`/api/projects/${projectId}/versions/restore`, {
+      const r = await fetch(apiPath(`/api/projects/${projectId}/versions/restore`), {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ versionId: id }),
@@ -264,7 +269,7 @@ export default function VersionHistory({
   const snapshot = async () => {
     setBusy(true);
     try {
-      const r = await fetch(`/api/projects/${projectId}/versions`, {
+      const r = await fetch(apiPath(`/api/projects/${projectId}/versions`), {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({

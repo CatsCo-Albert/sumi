@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { apiPath } from "@/lib/api-path";
 import { getAuthHeaders } from "@/lib/use-session";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -69,7 +70,7 @@ export function AskAgentDialog({
         body.selectionEnd = selection.endLine;
         body.selectionText = selection.text;
       }
-      const res = await fetch("/api/intents", {
+      const res = await fetch(apiPath("/api/intents"), {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(body),

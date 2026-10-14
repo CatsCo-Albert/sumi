@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { apiPath } from "@/lib/api-path";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EditorView } from "@codemirror/view";
 import { useSession, getAuthHeaders } from "@/lib/use-session";
@@ -242,7 +243,7 @@ function EditorPane({
   // Load agent members for the ask-agent dialog target picker.
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/projects/${projectId}/members`, { headers: getAuthHeaders() })
+    fetch(apiPath(`/api/projects/${projectId}/members`), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { members: [] }))
       .then((d) => {
         if (cancelled) return;
@@ -648,7 +649,7 @@ function SignInPane() {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/me", {
+      const res = await fetch(apiPath("/api/auth/me"), {
         headers: { Authorization: `Bearer ${token.trim()}` },
       });
       if (!res.ok) {

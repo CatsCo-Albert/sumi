@@ -15,6 +15,7 @@ import { useEditStore } from "@/stores/edit-store";
 import { useIntentStore } from "@/stores/intent-store";
 import { validateUiPatch } from "@/src/a2ui/validate";
 import { getStoredToken } from "./use-session";
+import { apiPath } from "./api-path";
 
 export interface UseUiEventsOptions {
   /** Optional server filter; the endpoint also accepts this. */
@@ -36,7 +37,7 @@ export function useUiEvents({
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
-    const url = new URL(endpoint, window.location.origin);
+    const url = new URL(apiPath(endpoint), window.location.origin);
     if (projectId) url.searchParams.set("projectId", projectId);
     const token = getStoredToken();
     if (token) url.searchParams.set("token", token);
@@ -116,7 +117,7 @@ export function useUiEvents({
 // ---------------------------------------------------------------------------
 
 async function refetchPendingEdits(projectId: string, fileId?: string): Promise<void> {
-  const url = new URL("/api/pending-edits", window.location.origin);
+  const url = new URL(apiPath("/api/pending-edits"), window.location.origin);
   url.searchParams.set("projectId", projectId);
   if (fileId) url.searchParams.set("fileId", fileId);
   const token = getStoredToken();
