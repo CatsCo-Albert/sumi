@@ -81,6 +81,54 @@ function initials(name: string | null, id: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Agent presence dot — reads /page-state once on mount + every 10s,
+// then renders a live indicator next to each agent in the picker.
+// ---------------------------------------------------------------------------
+
+function useAgentPresence(
+  projectId: string | null,
+  open: boolean
+): Map<string, { foreground: boolean; doc: string | null }> {
+  const [presence, setPresence] = useState<
+    Map<string, { foreground: boolean; doc: string | null }>
+  >(new Map());
+  useEffect(() => {
+    if (!projectId || !open) return;
+    let alive = true;
+    const fetch_ = async () => {
+      try {
+        const res = await fetch(apiPath(`/api/page-state/${projectId}`), {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!alive) return;
+        const m = new Map<string, { foreground: boolean; doc: string | null }>();
+        for (const member of data.members || []) {
+          const id = (member.user?.id || "").toString();
+          if (id.startsWith("a")) {
+            m.set(id, {
+              foreground: !!member.pageState?.foreground,
+              doc: member.pageState?.currentDocumentId || null,
+            });
+          }
+        }
+        setPresence(m);
+      } catch {
+        /* best-effort */
+      }
+    };
+    void fetch_();
+    const iv = setInterval(fetch_, 10_000);
+    return () => {
+      alive = false;
+      clearInterval(iv);
+    };
+  }, [projectId, open]);
+  return presence;
+}
+
+// ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
 
@@ -111,6 +159,7 @@ export function AiChatPanel({
   const [agents, setAgents] = useState<
     Array<{ subjectId: string; name: string | null }>
   >([]);
+  const agentPresence = useAgentPresence(projectId, open);
   const [loading, setLoading] = useState(false);
   /** 追问 chaining state — set by a card, consumed by the composer. */
   const [followUp, setFollowUp] = useState<{
@@ -285,7 +334,10 @@ export function AiChatPanel({
         inputRef={inputRef}
         projectId={projectId}
         fileId={fileId}
-        agents={agents}
+        agents={agents.map((a) => ({
+          ...a,
+          presence: agentPresence.get(a.subjectId) || null,
+        }))}
         followUp={followUp}
         onClearFollowUp={() => setFollowUp(null)}
         onCreated={(row) => {
@@ -475,7 +527,11 @@ function Composer({
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   projectId: string | null;
   fileId: string | null;
-  agents: Array<{ subjectId: string; name: string | null }>;
+  agents: Array<{
+    subjectId: string;
+    name: string | null;
+    presence?: { foreground: boolean; doc: string | null } | null;
+  }>;
   followUp: { threadId: string; agentId?: string } | null;
   onClearFollowUp: () => void;
   onCreated: (row: IntentRow) => void;
@@ -563,11 +619,16 @@ function Composer({
             className="rounded-md border border-border/60 bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground outline-none"
           >
             <option value="">所有 agent</option>
-            {agents.map((a) => (
-              <option key={a.subjectId} value={a.subjectId}>
-                {a.name || a.subjectId}
-              </option>
-            ))}
+            {agents.map((a) => {
+              const online = a.presence !== null;
+              const fg = a.presence?.foreground;
+              return (
+                <option key={a.subjectId} value={a.subjectId}>
+                  {a.name || a.subjectId}
+                  {online ? (fg ? " • 前台" : " • 后台") : " • 离线"}
+                </option>
+              );
+            })}
           </select>
           <span className="ml-auto text-[10px] text-muted-foreground/50">
             ⌘↩ 询问
