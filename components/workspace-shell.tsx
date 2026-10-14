@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiPath } from "@/lib/api-path";
+import { inviteUrl } from "@/lib/invite-link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { EditorView } from "@codemirror/view";
 import { useSession, getAuthHeaders } from "@/lib/use-session";
@@ -1030,8 +1031,11 @@ function SidePanel({
         {/* Invite link */}
         <button
           onClick={() => {
-            const url = `${window.location.origin}/?invite=${projectId}`;
-            void navigator.clipboard.writeText(url);
+            // Goes through inviteUrl so the deployment base path is kept —
+            // a bare origin+"/?invite=…" 404s behind the artifact gateway.
+            void navigator.clipboard.writeText(
+              inviteUrl(projectId, window.location.origin)
+            );
           }}
           className="mt-2 w-full rounded-md border border-border/60 px-2 py-1 text-[10px] font-medium text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
           title="复制邀请链接"
