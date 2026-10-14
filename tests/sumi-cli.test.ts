@@ -17,9 +17,12 @@ const CLI_PATHS = {
   proposeEdit: "/api/pending-edits",
   listPending: (p: string) => `/api/pending-edits?projectId=${p}`,
   applyEdit: "/api/edits/apply",
-  rejectEdit: (id: string) => `/api/pending-edits?id=${id}`,
+  // DELETE reads the id from the body as `editId`, not from a query param.
+  rejectEdit: "/api/pending-edits",
   onboard: (p: string) => `/api/projects/${p}/agent-setup`,
   intents: "/api/intents",
+  // Forwards to the WS admin surface for us, so callers never need the WS port.
+  pageState: (p: string) => `/api/page-state/${p}`,
   watch: (p: string) => `/api/ui/events?projectId=${p}`,
 } as const;
 
@@ -40,14 +43,16 @@ describe("sumi-cli paths", () => {
       ];
       // For parameterized routes like /api/projects/[id]/members,
       // we need to check the [id] form.
-      const exists = candidates.some((c) => fs.existsSync(c)) ||
-        // fallback — try substituting [id] for the param
-        (() => {
-          const wildcard = routeDir.replace(/prj_x/g, "[id]");
+      // For parameterized routes like /api/projects/[id]/members (and
+      // /api/page-state/[projectId]), try the dynamic-segment forms.
+      const exists =
+        candidates.some((c) => fs.existsSync(c)) ||
+        ["[id]", "[projectId]"].some((seg) => {
+          const wildcard = routeDir.replace(/prj_x/g, seg);
           return fs.existsSync(
             path.join(cwd, "app", wildcard.replace(/\/api\//, "api/"), "route.ts")
           );
-        })();
+        });
       expect(exists, `${name} -> ${urlPath} has no route.ts`).toBe(true);
     }
   });
