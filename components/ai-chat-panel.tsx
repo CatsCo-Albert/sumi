@@ -18,14 +18,11 @@ import { cn } from "@/lib/utils";
 import { getAuthHeaders } from "@/lib/use-session";
 import { useIntentStore } from "@/stores/intent-store";
 import { useEditStore } from "@/stores/edit-store";
-import { JsonRenderer } from "@/components/a2ui/renderers";
-import type { JsonRenderPayload } from "@/src/a2ui/schema";
+import { SumiSpecRenderer } from "@/components/a2ui/json-render";
 import type { IntentRow } from "@/src/intents";
 
-/** Try parsing answerText as a JsonRenderPayload — returns null on miss. */
-function tryParseJsonRender(
-  text: string | null | undefined
-): JsonRenderPayload | null {
+/** Detect a json-render Spec — returns the parsed spec or null. */
+function tryParseSpec(text: string | null | undefined): unknown | null {
   if (!text) return null;
   const t = text.trim();
   if (!t.startsWith("{")) return null;
@@ -34,12 +31,13 @@ function tryParseJsonRender(
     if (
       obj &&
       typeof obj === "object" &&
-      ["document_cards", "progress", "report", "status"].includes(obj.kind)
+      typeof (obj as any).root === "string" &&
+      typeof (obj as any).elements === "object"
     ) {
-      return obj as JsonRenderPayload;
+      return obj;
     }
   } catch {
-    /* not JSON — fall through to plain text */
+    /* not JSON */
   }
   return null;
 }
@@ -419,13 +417,13 @@ function IntentCard({
         </span>
       </div>
 
-      {/* Answer (expanded) — try JSON render payload first, fall back to plain text */}
+      {/* Answer (expanded) — render as json-render spec when possible, else text */}
       {expanded && intent.status === "answered" && (
         <div className="mt-2 border-t border-border/50 pt-2">
           {(() => {
-            const payload = tryParseJsonRender(intent.answerText);
-            if (payload) {
-              return <JsonRenderer payload={payload} />;
+            const spec = tryParseSpec(intent.answerText);
+            if (spec) {
+              return <SumiSpecRenderer spec={spec} />;
             }
             return intent.answerText ? (
               <div className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-foreground/90">

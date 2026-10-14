@@ -25,6 +25,8 @@
     "@codemirror/search": "^6.5.11",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.8",
+    "@json-render/core": "^0.21.0",
+    "@json-render/react": "^0.21.0",
     "clsx": "^2.1.1",
     "ioredis": "^5.8.2",
     "jose": "^6.2.12",
