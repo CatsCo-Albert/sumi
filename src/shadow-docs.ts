@@ -200,7 +200,16 @@ export type ShadowEventType =
   | "shadow_doc_promoted"
   | "shadow_doc_discarded";
 
-export function notifyShadow(
+/**
+ * Tell every project member that a shadow doc changed.
+ *
+ * Awaited by callers: the HTTP response reports the change, so the patches must
+ * be published before it is sent. The previous fire-and-forget wrapper let a
+ * patch land after the response, which a client can miss by reloading, and
+ * which leaked across test cases because a late patch arrived while the next
+ * case's listener was already attached.
+ */
+export async function notifyShadow(
   db: DatabaseSync,
   patch: {
     type: ShadowEventType;
@@ -210,20 +219,18 @@ export function notifyShadow(
     shadowId?: string;
     edits?: unknown[];
   }
-): void {
-  void (async () => {
-    const members = db
-      .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
-      .all(patch.projectId) as { subject_id: string }[];
-    for (const m of members) {
-      await publishUiPatch({
-        userId: m.subject_id,
-        projectId: patch.projectId,
-        patch,
-        source: "external_agent",
-      });
-    }
-  })();
+): Promise<void> {
+  const members = db
+    .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
+    .all(patch.projectId) as { subject_id: string }[];
+  for (const m of members) {
+    await publishUiPatch({
+      userId: m.subject_id,
+      projectId: patch.projectId,
+      patch,
+      source: "external_agent",
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

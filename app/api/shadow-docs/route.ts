@@ -136,7 +136,7 @@ export async function POST(request: Request) {
     baseDocHash,
   });
 
-  notifyShadow(db, {
+  await notifyShadow(db, {
     type: "shadow_doc_created",
     projectId,
     fileId,
@@ -213,7 +213,7 @@ export async function PATCH(request: Request) {
     status: body.status,
   });
 
-  notifyShadow(db, {
+  await notifyShadow(db, {
     type: body.status === "discarded" ? "shadow_doc_discarded" : "shadow_doc_updated",
     projectId: shadow.projectId,
     fileId: shadow.fileId,
@@ -250,7 +250,7 @@ export async function DELETE(request: Request) {
   }
 
   deleteShadowDoc(db, body.id);
-  notifyShadow(db, {
+  await notifyShadow(db, {
     type: "shadow_doc_discarded",
     projectId: shadow.projectId,
     fileId: shadow.fileId,
