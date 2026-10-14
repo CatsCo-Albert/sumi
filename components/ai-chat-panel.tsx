@@ -18,8 +18,32 @@ import { cn } from "@/lib/utils";
 import { getAuthHeaders } from "@/lib/use-session";
 import { useIntentStore } from "@/stores/intent-store";
 import { useEditStore } from "@/stores/edit-store";
-import { toast } from "@/components/ui/toast";
+import { JsonRenderer } from "@/components/a2ui/renderers";
+import type { JsonRenderPayload } from "@/src/a2ui/schema";
 import type { IntentRow } from "@/src/intents";
+
+/** Try parsing answerText as a JsonRenderPayload — returns null on miss. */
+function tryParseJsonRender(
+  text: string | null | undefined
+): JsonRenderPayload | null {
+  if (!text) return null;
+  const t = text.trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const obj = JSON.parse(t);
+    if (
+      obj &&
+      typeof obj === "object" &&
+      ["document_cards", "progress", "report", "status"].includes(obj.kind)
+    ) {
+      return obj as JsonRenderPayload;
+    }
+  } catch {
+    /* not JSON — fall through to plain text */
+  }
+  return null;
+}
+import { toast } from "@/components/ui/toast";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -395,14 +419,20 @@ function IntentCard({
         </span>
       </div>
 
-      {/* Answer (expanded) */}
+      {/* Answer (expanded) — try JSON render payload first, fall back to plain text */}
       {expanded && intent.status === "answered" && (
         <div className="mt-2 border-t border-border/50 pt-2">
-          {intent.answerText ? (
-            <div className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-foreground/90">
-              {intent.answerText}
-            </div>
-          ) : null}
+          {(() => {
+            const payload = tryParseJsonRender(intent.answerText);
+            if (payload) {
+              return <JsonRenderer payload={payload} />;
+            }
+            return intent.answerText ? (
+              <div className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-foreground/90">
+                {intent.answerText}
+              </div>
+            ) : null;
+          })()}
           <div className="mt-1 flex items-center gap-2">
             {intent.answeredBy && (
               <span className="text-[10px] text-muted-foreground/60">

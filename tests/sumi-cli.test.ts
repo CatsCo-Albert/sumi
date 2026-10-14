@@ -31,7 +31,7 @@ describe("sumi-cli paths", () => {
     const path = require("path");
     const cwd = process.cwd();
     for (const [name, p] of Object.entries(CLI_PATHS)) {
-      const urlPath = typeof p === "function" ? p("prj_x") : p;
+      const urlPath = typeof p === "function" ? p("prj_x", "notes/x.md") : p;
       // Strip query string for the file check.
       const routeDir = urlPath.split("?")[0];
       // Try .ts route file under app/
