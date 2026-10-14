@@ -48,29 +48,35 @@ function rowToEdit(r: {
   };
 }
 
-/** Broadcast a removal patch to every member of the edit's project. */
-function notifyEditRemoved(
+/**
+ * Broadcast a removal patch to every member of the edit's project.
+ *
+ * Awaited by the caller: the response claims the edits were rejected, so the
+ * patches must be published before it is sent. Leaving this fire-and-forget let
+ * a rejected edit's patch land after the response — a client could reload and
+ * miss it, and in tests the late patch leaked into the next case, which is how
+ * that surfaced.
+ */
+async function notifyEditRemoved(
   db: DatabaseSync,
   edit: PendingEditRow
-): void {
-  void (async () => {
-    const members = db
-      .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
-      .all(edit.projectId) as { subject_id: string }[];
-    for (const m of members) {
-      await publishUiPatch({
-        userId: m.subject_id,
+): Promise<void> {
+  const members = db
+    .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
+    .all(edit.projectId) as { subject_id: string }[];
+  for (const m of members) {
+    await publishUiPatch({
+      userId: m.subject_id,
+      projectId: edit.projectId,
+      patch: {
+        type: "pending_edit_changed",
         projectId: edit.projectId,
-        patch: {
-          type: "pending_edit_changed",
-          projectId: edit.projectId,
-          fileId: edit.fileId,
-          edit: null,
-        },
-        source: "system",
-      });
-    }
-  })();
+        fileId: edit.fileId,
+        edit: null,
+      },
+      source: "system",
+    });
+  }
 }
 
 export async function POST(request: Request) {
@@ -146,7 +152,7 @@ export async function POST(request: Request) {
   }
 
   for (const e of rejected) {
-    notifyEditRemoved(db, e);
+    await notifyEditRemoved(db, e);
   }
 
   return Response.json({ rejected: rejected.length });

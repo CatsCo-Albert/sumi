@@ -41,32 +41,37 @@ async function actorAndRole(
   return { actor, role };
 }
 
-/** Notify all project members — humans AND agents. Fire-and-forget. */
-function notifyProjectMembers(
+/**
+ * Notify all project members — humans AND agents.
+ *
+ * Awaited by the caller: the response reports the edit as created or dropped,
+ * so the patches must be published before it is sent. Fire-and-forget let a
+ * patch land after the response — a client could reload and miss it, and the
+ * late patch leaked into the next test case, which is how that surfaced.
+ */
+async function notifyProjectMembers(
   db: Awaited<ReturnType<typeof getDb>>,
   projectId: string,
   fileId: string,
   edit: ReturnType<typeof getPendingEdit>,
   source: "internal_agent" | "external_agent" | "system"
-): void {
-  void (async () => {
-    const members = db
-      .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
-      .all(projectId) as { subject_id: string }[];
-    for (const m of members) {
-      await publishUiPatch({
-        userId: m.subject_id,
+): Promise<void> {
+  const members = db
+    .prepare("SELECT subject_id FROM project_members WHERE project_id = ?")
+    .all(projectId) as { subject_id: string }[];
+  for (const m of members) {
+    await publishUiPatch({
+      userId: m.subject_id,
+      projectId,
+      patch: {
+        type: "pending_edit_changed",
         projectId,
-        patch: {
-          type: "pending_edit_changed",
-          projectId,
-          fileId,
-          edit,
-        },
-        source,
-      });
-    }
-  })();
+        fileId,
+        edit,
+      },
+      source,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +193,7 @@ export async function POST(request: Request) {
   // Broadcast to every project member — humans see decorations,
   // agents can poll or SSE-subscribe for notifications.
   for (const edit of created) {
-    notifyProjectMembers(db, projectId, fileId, edit, "external_agent");
+    await notifyProjectMembers(db, projectId, fileId, edit, "external_agent");
   }
 
   return Response.json({ edits: created }, { status: 201 });
