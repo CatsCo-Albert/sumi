@@ -1,6 +1,7 @@
 ---
 name: sumi-intents
 description: Handle "ask an agent" intents from humans — poll open intents targeted at you, claim them, answer with text or a pending-edit, and keep threads going.
+user-invocable: true
 ---
 
 # Sumi Intents

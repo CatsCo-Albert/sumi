@@ -1,6 +1,7 @@
 ---
 name: sumi-bootstrap
 description: Verify connectivity to a Sumi server and confirm the agent's subject identity. Run this once before any other sumi-* skill.
+user-invocable: true
 ---
 
 # Sumi Bootstrap

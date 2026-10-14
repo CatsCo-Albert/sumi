@@ -1,6 +1,7 @@
 ---
 name: sumi-collab
 description: Read and propose edits to a Sumi document. Use for all document reads, proposals for structural changes, and pending-edit status queries.
+user-invocable: true
 ---
 
 # Sumi Collaboration

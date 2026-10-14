@@ -1,6 +1,7 @@
 ---
 name: sumi-onboard
 description: Get a project-specific system prompt for a Sumi collaborator agent. Run once per project; output is pasteable into your agent's system message.
+user-invocable: true
 ---
 
 # Sumi Onboard — Project-Specific Prompt

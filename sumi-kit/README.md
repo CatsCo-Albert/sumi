@@ -23,6 +23,27 @@ Defaults install to:
 
 Adjust with `--skills-dest` and `--cli-dest` for your runtime layout.
 
+## XiaoBa-CLI (verified)
+
+XiaoBa loads skills from `<repo>/skills/<name>/SKILL.md` via `gray-matter` + `name/description` frontmatter — which is exactly what our SKILL.md files use. Install once:
+
+```bash
+python3 sumi-kit/install.py \
+  --target-root ~/Developer/buildsense-ai/XiaoBa-CLI \
+  --skills-dest skills \
+  --cli-dest bin
+```
+
+Then in XiaoBa's agent env:
+
+```bash
+export SUMI_BASE_URL="http://localhost:3000"
+export SUMI_API_KEY="cc_..."   # the bot's CatsCo ApiKey
+./bin/sumi whoami
+```
+
+XiaoBa's `catsco skill list` will show the four sumi skills. When a task touches a Sumi doc, the agent reads `sumi-collab/SKILL.md` and picks up the correct command.
+
 ## Quick agent setup
 
 ```bash
