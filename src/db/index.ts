@@ -183,6 +183,30 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         ON shadow_docs(project_id, file_id, owner_id, status);
     `,
   },
+  {
+    version: 8,
+    sql: `
+      -- Version history —— 用户可见的历史版本列表。
+      -- 与 doc_snapshots 区分：snapshot 是操作性的漂移检测基线（单 latest），
+      -- doc_versions 是用户可浏览/恢复的快照历史。
+      CREATE TABLE IF NOT EXISTS doc_versions (
+        id           TEXT PRIMARY KEY,         -- "ver_<ts>_<rand>"
+        project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        file_id      TEXT NOT NULL,
+        content      TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        author_id    TEXT NOT NULL,
+        author_name  TEXT,
+        label        TEXT,                     -- 可选人工标签 "v1.0"
+        source       TEXT NOT NULL CHECK (source IN ('auto','manual','restore'))
+                     DEFAULT 'auto',
+        size_bytes   INTEGER NOT NULL,
+        created_at   INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_doc_versions
+        ON doc_versions(project_id, file_id, created_at DESC);
+    `,
+  },
 ];
 
 export async function getDb(): Promise<DatabaseSync> {

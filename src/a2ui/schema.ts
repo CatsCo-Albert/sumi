@@ -74,6 +74,15 @@ export type UiPatch =
       shadowId?: string;
       edits?: unknown[];
     }
+  | {
+      /** A doc version was restored — clients should let the restored content
+       *  flow through normal save paths but skip re-snapshotting it as a new
+       *  auto-version, and refresh the version-history list. */
+      type: "doc_restored";
+      projectId: string;
+      fileId: string;
+      versionId: string;
+    }
   | { type: "noop" };
 
 // ---------------------------------------------------------------------------

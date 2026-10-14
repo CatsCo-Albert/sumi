@@ -45,6 +45,8 @@ interface UiStoreState {
   promptCommand: PromptCommand | null;
   pendingPromptCommands: PromptCommand[];
   focusRangeCommand: FocusRangeCommand | null;
+  /** Bumped when a doc version is restored — keys off `${projectId}-${fileId}`. */
+  lastRestore: { documentId: string; fileId: string; versionId: string; token: number } | null;
 
   setCurrentDocumentId: (id: string | null) => void;
   setActiveMainBlock: (block: WorkspaceMainBlock) => void;
@@ -72,6 +74,7 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   promptCommand: null,
   pendingPromptCommands: [],
   focusRangeCommand: null,
+  lastRestore: null,
 
   setCurrentDocumentId: (id) =>
     set((state) => ({
@@ -208,6 +211,23 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
             endLine: patch.endLine,
           },
           attentionSignal: signal("editor", "navigation"),
+        }));
+        return;
+
+      case "doc_restored":
+        set((state) => ({
+          lastRestore: {
+            documentId: `${patch.projectId}-${patch.fileId}`,
+            fileId: patch.fileId,
+            versionId: patch.versionId,
+            token: Date.now(),
+          },
+          // Reload-safety: the restored content flows through the editor via
+          // Yjs; bumping attention lets the shell flash the editor pane.
+          attentionSignal:
+            state.currentDocumentId === `${patch.projectId}-${patch.fileId}`
+              ? signal("editor")
+              : state.attentionSignal,
         }));
         return;
 
