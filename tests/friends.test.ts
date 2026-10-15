@@ -90,6 +90,8 @@ interface StubOpts {
   viewer?: { uid: number; username?: string; kind?: string } | null;
   /** Throw instead of answering, for both rosters. */
   offline?: boolean;
+  /** Status for the ApiKey verification call. */
+  meStatus?: number;
 }
 
 /**
@@ -115,6 +117,21 @@ function stubUpstreams(opts: StubOpts = {}) {
             viewer ? { authenticated: true, viewer } : { authenticated: false }
           ),
           { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      // ApiKey verification — CatsCo answers who the key belongs to. Not
+      // recorded, because it is the caller's identity check rather than one of
+      // the two roster reads these assertions are about.
+      if (target.endsWith("/api/me")) {
+        return new Response(
+          JSON.stringify({
+            uid: 574,
+            username: "bot-abraxas-5617",
+            display_name: "Abraxas",
+            account_type: "bot",
+          }),
+          { status: opts.meStatus ?? 200, headers: { "Content-Type": "application/json" } }
         );
       }
 
@@ -255,12 +272,23 @@ describe("GET /api/friends — credentials", () => {
     for (const c of calls) expect(c.auth).toBe(`Bearer ${jwt}`);
   });
 
-  it("does not reach CatsCo for an ApiKey caller it cannot verify", async () => {
-    // An ApiKey actor needs CATSCO_SERVICE_TOKEN to introspect; without it there
-    // is no actor, so the route must refuse rather than forward blind.
+  it("refuses an ApiKey caller — the roster picker is a human surface", async () => {
+    // Verifying the key now works (that is what unblocks agents on the WS room),
+    // but this route itself stays user-only: it feeds the "add member" picker in
+    // the browser, and an agent has no business listing a human's friends.
     const calls = stubUpstreams();
     const res = await GET(getReq("ApiKey cc_test_key"));
 
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("user required");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("does not leak the roster when a key is rejected outright", async () => {
+    const calls = stubUpstreams({ meStatus: 401 });
+    const res = await GET(getReq("ApiKey cc_dead_key"));
+
+    // Either refusal is fine — what must not happen is a 200 with someone's list.
     expect([403, 503]).toContain(res.status);
     expect(calls).toHaveLength(0);
   });
