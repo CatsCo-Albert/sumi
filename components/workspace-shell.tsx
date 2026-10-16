@@ -24,7 +24,7 @@ import { EditorToolbar } from "@/components/editor/editor-toolbar";
 import OutlineSidebar from "@/components/editor/outline-sidebar";
 import VersionHistory from "@/components/editor/version-history";
 import { AskAgentDialog } from "@/components/ask-agent-dialog";
-import { AiChatPanel } from "@/components/ai-chat-panel";
+import { AgentAskDock } from "@/components/agent-ask-dock";
 import EditCommandBar from "@/components/editor/edit-command-bar";
 import { useEditStore } from "@/stores/edit-store";
 import DocumentListPane from "@/components/document-list-pane";
@@ -135,14 +135,10 @@ export default function WorkspaceShell() {
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-background text-foreground">
-      {/* Canvas layer — main content (shrinks right when the AI panel opens) */}
-      <div
-        className={cn(
-          "absolute inset-0 transition-all duration-200 ease-out-quint",
-          aiOpen && "canvas-retreat",
-          aiOpen && "right-[360px]"
-        )}
-      >
+      {/* Canvas layer — main content.
+          The ask dock floats over this rather than docking beside it: it is an
+          interruption, not a workspace, so the document keeps its full width. */}
+      <div className="absolute inset-0">
         {loading ? (
           <LoadingPane />
         ) : !actor ? (
@@ -158,23 +154,14 @@ export default function WorkspaceShell() {
         )}
       </div>
 
-      {/* Dim layer — subtle veil when AI dock is engaged */}
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-0 bg-black/[0.03] transition-opacity duration-200",
-          aiOpen ? "opacity-100" : "opacity-0"
-        )}
-      />
-
-      {/* AI chat panel — right slide-over with intent threads + composer */}
+      {/* Ask dock — floating button, expanding to an input box. No thread list:
+          the answer to the newest ask is the only thing it shows. */}
       {actor && (
-        <AiChatPanel
+        <AgentAskDock
           open={aiOpen}
-          onClose={() => setPanelVisibility("ai", false)}
+          onOpenChange={(next) => setPanelVisibility("ai", next)}
           projectId={aiProjectId}
           fileId={aiFileId}
-          actorId={actor.id}
         />
       )}
 
