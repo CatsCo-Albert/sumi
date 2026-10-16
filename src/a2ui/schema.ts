@@ -42,6 +42,16 @@ export type UiPatch =
   | { type: "queue_prompt"; prompt: string; autoSend?: boolean }
   | { type: "focus_document_range"; documentId: string; startLine: number; endLine: number }
   | {
+      /**
+       * Editor view mode for the open document.
+       *
+       * Distinct from `set_main_block: "preview"`: that swaps the workspace pane,
+       * this is the source / split / preview toggle inside the editor.
+       */
+      type: "set_editor_view";
+      view: "source" | "split" | "preview";
+    }
+  | {
       /** A pending edit proposal was added/removed for a doc in this project.
        *  Consumers hydrate `useEditStore.pendingEdits` from the payload. */
       type: "pending_edit_changed";
