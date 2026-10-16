@@ -27,6 +27,8 @@ import { getAuthHeaders } from "@/lib/use-session";
 import { useIntentStore } from "@/stores/intent-store";
 import { useUiStore } from "@/stores/ui-store";
 import { askDockState } from "@/lib/ask-dock";
+import { parseSpec } from "@/lib/spec";
+import { SumiSpecRenderer } from "@/components/a2ui/json-render";
 import type { IntentRow } from "@/src/intents";
 import { toast } from "@/components/ui/toast";
 
@@ -139,9 +141,19 @@ export function AgentAskDock({
     };
   }, [open]);
 
-  const status = useMemo(
+  const dock = useMemo(
     () => askDockState(intents, { projectId, fileId }),
     [intents, projectId, fileId]
+  );
+
+  // Decide once whether the answer is UI. `askDockState` stays free of the Spec
+  // format, and the renderer is only reached for answers that actually are one.
+  const status = useMemo(
+    () =>
+      dock.kind === "answered"
+        ? { ...dock, spec: parseSpec(dock.answer) }
+        : dock,
+    [dock]
   );
 
   const submit = useCallback(async () => {
@@ -281,6 +293,13 @@ export function AgentAskDock({
               <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
                 已发送 · 等待回复
+              </div>
+            ) : status.spec ? (
+              // An answer may be a json-render Spec rather than prose, in which
+              // case it is UI, not text. Rendering the raw JSON here would show the
+              // author the machine-readable form of their own answer.
+              <div className="mt-1.5 max-h-72 overflow-auto">
+                <SumiSpecRenderer spec={status.spec} />
               </div>
             ) : (
               <div className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11.5px] leading-6 text-foreground/90">

@@ -200,7 +200,16 @@ function EditorPane({
   const [tapEnabled, setTapEnabled] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
   const [cursorLine, setCursorLine] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // The sidebar's visibility lives in the ui-store, not in local state.
+  //
+  // It used to be a local `useState`, which meant two things disagreed: page state
+  // broadcast `panelVisibility.sidebar` (so every other client and agent was told a
+  // constant), and a `set_panel_visibility` patch moved the store — which nothing
+  // rendered from — while the sidebar the user could see stayed put. That is the
+  // same shape as the view-mode toggle: state a patch cannot reach reads as "the
+  // assistant's UI commands don't work".
+  const sidebarOpen = useUiStore((s) => s.panelVisibility.sidebar);
+  const setPanelVisibility = useUiStore((s) => s.setPanelVisibility);
   const [sidebarTab, setSidebarTab] = useState<"outline" | "members" | "history">("outline");
   const [askOpen, setAskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -245,27 +254,33 @@ function EditorPane({
     scheduleSave(content);
   };
 
-  // Right sidebar (大纲/成员) — persisted per project
+  // Right sidebar (大纲/成员) — persisted per project.
+  //
+  // The stored preference is applied *into the store*, so a restored session and a
+  // patched one travel the same path. No stored value means closed, which is what
+  // the local state used to default to.
   useEffect(() => {
     try {
       const v = localStorage.getItem(`sumi:sidebar:${projectId}`);
       if (v === "outline" || v === "members" || v === "history") {
-        setSidebarOpen(true);
+        setPanelVisibility("sidebar", true);
         setSidebarTab(v);
       } else if (v === "closed") {
-        setSidebarOpen(false);
+        setPanelVisibility("sidebar", false);
+      } else {
+        setPanelVisibility("sidebar", false);
       }
     } catch {
       /* private mode */
     }
-  }, [projectId]);
+  }, [projectId, setPanelVisibility]);
 
   const toggleSidebar = (tab?: "outline" | "members" | "history") => {
     const next = tab
       ? !(sidebarOpen && sidebarTab === tab)
       : !sidebarOpen;
     const nextTab = tab ?? sidebarTab;
-    setSidebarOpen(next);
+    setPanelVisibility("sidebar", next);
     if (tab) setSidebarTab(tab);
     try {
       localStorage.setItem(
