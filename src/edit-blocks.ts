@@ -18,6 +18,57 @@ export interface LineBlock {
   updated: string;
 }
 
+export interface DriftReport {
+  startLine: number;
+  endLine: number;
+  /** What the proposal recorded for that range. */
+  expected: string;
+  /** What the document actually holds there now. */
+  found: string;
+}
+
+/**
+ * Blocks whose recorded `original` no longer matches the document.
+ *
+ * The room path has CRDT anchors to re-resolve positions against; the storage
+ * path has none, so a block carries only the line numbers and the text it was
+ * written against. If the document moved since — lines inserted or removed above
+ * the target — applying by those numbers rewrites whatever now occupies them.
+ * The reviewer approved a specific passage and something else gets replaced,
+ * which is indistinguishable from an edit landing in the wrong place or silently
+ * not taking effect.
+ *
+ * Callers should refuse when this reports anything, rather than write blind.
+ */
+export function detectDrift(
+  content: string,
+  blocks: Array<LineBlock & { original?: string }>
+): DriftReport[] {
+  const lines = content.split("\n");
+  const reports: DriftReport[] = [];
+
+  for (const block of blocks) {
+    // No `original` recorded is not evidence of drift — it is a caller that never
+    // captured one. Out-of-range ranges are the apply step's to report.
+    if (typeof block.original !== "string") continue;
+    const startIdx = block.startLine - 1;
+    const endIdx = block.endLine - 1;
+    if (startIdx < 0 || endIdx < startIdx || endIdx >= lines.length) continue;
+
+    const found = lines.slice(startIdx, endIdx + 1).join("\n");
+    if (found !== block.original) {
+      reports.push({
+        startLine: block.startLine,
+        endLine: block.endLine,
+        expected: block.original,
+        found,
+      });
+    }
+  }
+
+  return reports;
+}
+
 export interface ApplyResult {
   /** The document after every applicable block. */
   content: string;

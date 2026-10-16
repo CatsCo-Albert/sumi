@@ -27,7 +27,7 @@ import { actorFromRequest } from "@/lib/http-auth";
 import { getDb } from "@/src/db";
 import { projectRoleFor } from "@/src/auth/actor";
 import { publishUiPatch } from "@/src/ui-bus/event-bus";
-import { applyBlocksToContent } from "@/src/edit-blocks";
+import { applyBlocksToContent, detectDrift } from "@/src/edit-blocks";
 import { docKey } from "@/src/doc-content";
 import { getStorage } from "@/src/storage";
 import crypto from "crypto";
@@ -67,6 +67,9 @@ export async function POST(request: Request) {
         startLine: b.startLine,
         endLine: b.endLine,
         updated: b.updated,
+        // Carry the anchor text through: the storage path uses it to notice that
+        // the document moved since the proposal was written.
+        original: b.original,
       }));
     }
   }
@@ -136,6 +139,23 @@ export async function POST(request: Request) {
     }
 
     const current = (await storage.download(key)).toString("utf8");
+
+    // No CRDT anchors on this path, so verify the passage the reviewer approved is
+    // still the passage these line numbers point at. Writing blind would replace
+    // whatever moved into those lines — the reviewer would see a different edit
+    // than the one they accepted.
+    const drift = detectDrift(current, blocks);
+    if (drift.length > 0) {
+      return Response.json(
+        {
+          error: "document changed since this edit was proposed",
+          drift,
+          hint: "re-read the document and propose the edit again",
+        },
+        { status: 409 }
+      );
+    }
+
     const result = applyBlocksToContent(current, blocks);
     skipped = result.skipped;
 

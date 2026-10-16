@@ -42,7 +42,9 @@ import {
   closeAllPersistence,
 } from "./yjs-persistence";
 import { createRelPosForEdit, getLineFromRelPos } from "./edit-position-tracker";
+import { persistRoomToStorage, seedRoomFromStorage } from "./room-persistence";
 import { getDb } from "../db";
+import { getStorage } from "../storage";
 import {
   resolveActor,
   projectRoleFor,
@@ -101,6 +103,14 @@ interface DocData {
   awareness: awarenessProtocol.Awareness;
   clients: Set<WebSocket>;
   persistenceCleanup?: () => void;
+  /**
+   * Whether this room knows the document's real state — restored from Redis, or
+   * seeded from the persisted blob, or the blob genuinely held an empty document.
+   *
+   * An unseeded room is not "an empty document"; it is a room nobody has written
+   * to yet. The distinction is what stops a closing room from erasing a real file.
+   */
+  baselineKnown: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +226,25 @@ async function getYDoc(docName: string): Promise<DocData> {
       let persistenceCleanup: (() => void) | undefined;
 
       const parsed = parseRoomName(docName);
+      let baselineKnown = false;
       if (parsed) {
         const { projectId, fileId } = parsed;
         const restored = await restoreDocument(doc, projectId, fileId);
-        if (restored) console.log(`📥 restored ${docName}`);
+        if (restored) {
+          console.log(`📥 restored ${docName}`);
+          baselineKnown = true;
+        } else {
+          // No Redis in this deployment, so the persisted blob is the baseline a
+          // fresh room starts from. Seeding is not optional: rooms are created by
+          // any code path that asks for the doc — the RelPos enrichment on the
+          // propose-edit route, for one — so without it a room could appear, hold
+          // nothing, and be treated as authoritative, blanking the document for
+          // everyone who reads next.
+          baselineKnown = await seedRoomFromStorage(docName, doc);
+          if (baselineKnown && doc.getText("content").length > 0) {
+            console.log(`🌱 seeded ${docName} from storage`);
+          }
+        }
         persistenceCleanup = bindDocumentToPersistence(doc, projectId, fileId);
       } else {
         console.warn(`⚠️ unparsable room name (no persistence): ${docName}`);
@@ -250,6 +275,7 @@ async function getYDoc(docName: string): Promise<DocData> {
         awareness,
         clients: new Set(),
         persistenceCleanup,
+        baselineKnown,
       };
       docs.set(docName, docData);
       return docData;
@@ -277,12 +303,30 @@ async function resolveDocData(roomName: string): Promise<DocData | null> {
 
 function cleanupDocIfEmpty(docName: string): void {
   const docData = docs.get(docName);
-  if (docData && docData.clients.size === 0) {
-    docData.persistenceCleanup?.();
-    docData.doc.destroy();
+  if (!docData || docData.clients.size > 0) return;
+
+  // Flush first, tear down second — see room-persistence.ts for why the order
+  // matters. This runs before destroying the doc so the content still exists at
+  // the moment it is written.
+  void persistRoomToStorage(docName, docData.doc, {
+    // Only a room that knew the document may write an empty one back — otherwise
+    // "nobody has written yet" would be stored as "the document is blank".
+    trustEmpty: docData.baselineKnown,
+  })
+    .then((outcome) => {
+      if (outcome === "written") console.log(`💾 flushed ${docName} to storage`);
+    })
+    .catch((err) => console.error(`❌ flush ${docName} failed:`, err))
+    .finally(() => {
+    // Re-check: a client may have reconnected while the flush was in flight, in
+    // which case the room is live again and must not be destroyed underneath it.
+    const current = docs.get(docName);
+    if (current !== docData || current.clients.size > 0) return;
+    current.persistenceCleanup?.();
+    current.doc.destroy();
     docs.delete(docName);
     console.log(`🧹 cleaned empty doc: ${docName}`);
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------
