@@ -176,12 +176,23 @@ export async function POST(request: Request) {
   let enrichedBlocks: EditBlock[] = blocks;
   try {
     const wsPort = process.env.WS_PORT || "12345";
+    const internalSecret = process.env.INTERNAL_API_SECRET || "";
     const res = await fetch(
       `http://localhost:${wsPort}/relpos/${projectId}/${encodeURIComponent(fileId)}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // The ws-server accepts either this secret or a resolved actor, and this
+          // call has no user credential to present. Without the header it was
+          // refused, the failure was swallowed by the catch below, and every
+          // proposal silently fell back to raw line numbers — so the anchors that
+          // keep a block pointing at the right passage as the document drifts were
+          // never captured at all.
+          ...(internalSecret ? { "x-internal-secret": internalSecret } : {}),
+        },
         body: JSON.stringify({ blocks }),
+        signal: AbortSignal.timeout(5_000),
       }
     );
     if (res.ok) {
@@ -189,7 +200,7 @@ export async function POST(request: Request) {
       if (Array.isArray(d.blocks)) enrichedBlocks = d.blocks;
     }
   } catch {
-    // relpos enrichment is optional — fall back to raw line numbers
+    // Enrichment is optional — raw line numbers still work, just less robustly.
   }
 
   // Capture a doc snapshot so the apply path can verify anchors later.
