@@ -36,6 +36,10 @@ const uiPatchSchema = z.union([
     endLine: z.number().int().min(1),
   }),
   z.object({
+    type: z.literal("set_editor_view"),
+    view: z.enum(["source", "split", "preview"]),
+  }),
+  z.object({
     type: z.literal("pending_edit_changed"),
     projectId: z.string().min(1),
     fileId: z.string().min(1),

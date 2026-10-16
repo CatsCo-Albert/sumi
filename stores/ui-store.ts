@@ -47,6 +47,14 @@ interface UiStoreState {
   promptCommand: PromptCommand | null;
   pendingPromptCommands: PromptCommand[];
   focusRangeCommand: FocusRangeCommand | null;
+  /**
+   * One-shot request to change the editor's view mode.
+   *
+   * The toggle is local component state today, so a patch cannot reach it by
+   * setting a shared field; it asks instead, and the shell applies the request
+   * and acknowledges it — same handshake as `focusRangeCommand`.
+   */
+  editorViewCommand: { id: string; view: "source" | "split" | "preview" } | null;
   /** Bumped when a doc version is restored — keys off `${projectId}-${fileId}`. */
   lastRestore: { documentId: string; fileId: string; versionId: string; token: number } | null;
 
@@ -59,6 +67,7 @@ interface UiStoreState {
   consumeAttention: () => void;
   consumePromptCommand: () => void;
   consumeFocusRange: () => void;
+  consumeEditorView: () => void;
   applyUiPatch: (patch: UiPatch) => void;
 }
 
@@ -78,6 +87,7 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   promptCommand: null,
   pendingPromptCommands: [],
   focusRangeCommand: null,
+  editorViewCommand: null,
   lastRestore: null,
 
   setCurrentDocumentId: (id) =>
@@ -139,6 +149,7 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
     set({ attentionSignal: signal(target, reason) }),
   consumeAttention: () => set({ attentionSignal: null }),
   consumeFocusRange: () => set({ focusRangeCommand: null }),
+  consumeEditorView: () => set({ editorViewCommand: null }),
 
   consumePromptCommand: () =>
     set((state) => {
@@ -239,6 +250,17 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
           },
           attentionSignal: signal("editor", "navigation"),
         }));
+        return;
+
+      case "set_editor_view":
+        // A fresh id each time, so asking for the same mode twice still reaches
+        // the shell as a new request rather than a no-op state change.
+        set({
+          editorViewCommand: {
+            id: `view-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            view: patch.view,
+          },
+        });
         return;
 
       case "doc_restored":

@@ -197,6 +197,18 @@ function EditorPane({
   const [collaborators, setCollaborators] = useState<Array<{ name: string; color: string; id?: string }>>([]);
   const [connStatus, setConnStatus] = useState({ isConnected: false, isSynced: false });
   const [viewMode, setViewMode] = useState<EditorViewMode>("source");
+  const editorViewCommand = useUiStore((s) => s.editorViewCommand);
+  const consumeEditorView = useUiStore((s) => s.consumeEditorView);
+
+  // The toggle is local component state, which a store update cannot reach, so the
+  // store carries a one-shot request instead: apply it here, then acknowledge by
+  // clearing it. Without the acknowledgement the request would be re-applied on
+  // every render and the user could never switch away from the requested mode.
+  useEffect(() => {
+    if (!editorViewCommand) return;
+    setViewMode(editorViewCommand.view);
+    consumeEditorView();
+  }, [editorViewCommand, consumeEditorView]);
   const [tapEnabled, setTapEnabled] = useState(false);
   const [currentContent, setCurrentContent] = useState("");
   const [cursorLine, setCursorLine] = useState<number | null>(null);
