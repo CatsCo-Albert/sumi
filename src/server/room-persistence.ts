@@ -24,6 +24,28 @@ import { getStorage } from "../storage";
 
 export type FlushOutcome = "written" | "unchanged" | "skipped";
 
+/**
+ * Refuse to persist a document beyond this size.
+ *
+ * A runaway can't be diagnosed from inside the process that is producing it, and
+ * the failure mode is severe: one inflated room reached 90 MB on disk and 33 M
+ * characters in memory, which is both a storage problem and a memory one. A ceiling
+ * turns "grows until something breaks" into "stops and says so".
+ *
+ * Generous for markdown (4 MB is far past any real note), overridable, and it only
+ * ever blocks a write — reads and edits in the editor keep working.
+ */
+export const MAX_PERSIST_BYTES = Number(
+  process.env.SUMI_MAX_DOC_BYTES || 4 * 1024 * 1024
+);
+
+/** True when this content is too large to be a real document. */
+export function exceedsPersistLimit(content: string): boolean {
+  // Byte length, not character count: the limit protects storage, and CJK text is
+  // 3 bytes per character in UTF-8.
+  return Buffer.byteLength(content, "utf8") > MAX_PERSIST_BYTES;
+}
+
 /** Storage key for a document's canonical blob. */
 export function docStorageKey(projectId: string, fileId: string): string {
   return `sumi/${projectId}/files/${fileId}`;
@@ -94,6 +116,15 @@ export async function persistRoomToStorage(
 
   const content = doc.getText("content").toString();
   if (content.length === 0 && !opts.trustEmpty) return "skipped";
+
+  if (exceedsPersistLimit(content)) {
+    console.error(
+      `❌ refusing to persist ${docName}: ${Buffer.byteLength(content, "utf8")} bytes ` +
+        `exceeds SUMI_MAX_DOC_BYTES (${MAX_PERSIST_BYTES}). The in-memory room is left ` +
+        `untouched; the stored copy stays as it was.`
+    );
+    return "skipped";
+  }
 
   const { projectId, fileId } = parsed;
   const key = docStorageKey(projectId, fileId);
