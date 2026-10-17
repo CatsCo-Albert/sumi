@@ -853,8 +853,21 @@ function SidePanel({
   projectId: string;
   fileId: string;
 }) {
+  // The panel width is patch-drivable, so it has to be rendered from the store.
+  // It previously lived only in the store (written by `set_panel_size`, read once
+  // and dropped), while the element below was a fixed `w-60` — the patch reported
+  // success and nothing on screen moved.
+  //
+  // No max-width: a cap silently swallowed the upper half of the range, so asking
+  // for 60% and asking for 90% looked identical. The store already clamps to the
+  // documented 10–90, and a narrow min-width is what keeps the panel usable.
+  const sidebarWidth = useUiStore((s) => s.panelWidth.sidebar);
+
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-l border-border/60 bg-background">
+    <aside
+      className="flex min-w-[200px] shrink-0 flex-col border-l border-border/60 bg-background"
+      style={{ width: `${sidebarWidth}%` }}
+    >
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div className="flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
           {(["outline", "members", "history"] as const).map((t) => (
