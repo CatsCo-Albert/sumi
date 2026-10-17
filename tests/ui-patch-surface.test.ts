@@ -133,3 +133,49 @@ describe("applyUiPatch — the whole chrome is reachable", () => {
     expect(useUiStore.getState().panelWidth.sidebar).toBe(10);
   });
 });
+
+describe("applyUiPatch — theme", () => {
+  it("sets the accent without disturbing density", () => {
+    // Merged rather than replaced: a theme call that only names the accent must not
+    // silently reset the other axis.
+    useUiStore.getState().applyUiPatch({ type: "set_theme", accent: "violet" });
+    const t = useUiStore.getState().theme;
+    expect(t.accent).toBe("violet");
+    expect(t.density).toBe("comfortable");
+  });
+
+  it("sets the density without disturbing the accent", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_theme", accent: "emerald" });
+    useUiStore.getState().applyUiPatch({ type: "set_theme", density: "compact" });
+    const t = useUiStore.getState().theme;
+    expect(t.accent).toBe("emerald");
+    expect(t.density).toBe("compact");
+  });
+
+  it("accepts a no-op theme patch", () => {
+    const before = useUiStore.getState().theme;
+    useUiStore.getState().applyUiPatch({ type: "set_theme" });
+    expect(useUiStore.getState().theme).toEqual(before);
+  });
+
+  it("validates both closed vocabularies", () => {
+    expect(validateUiPatch({ type: "set_theme", accent: "violet" })).toMatchObject({
+      accent: "violet",
+    });
+    expect(validateUiPatch({ type: "set_theme", density: "compact" })).toMatchObject({
+      density: "compact",
+    });
+    expect(validateUiPatch({ type: "set_theme", accent: "neon" })).toBeNull();
+    expect(validateUiPatch({ type: "set_theme", density: "airy" })).toBeNull();
+  });
+
+  it("does not touch layout state", () => {
+    // Theme is presentation only — it must not move the user or open a panel.
+    const before = useUiStore.getState();
+    useUiStore.getState().applyUiPatch({ type: "set_theme", accent: "rose" });
+    const after = useUiStore.getState();
+    expect(after.panelVisibility).toEqual(before.panelVisibility);
+    expect(after.currentDocumentId).toBe(before.currentDocumentId);
+    expect(after.sidebarTab).toBe(before.sidebarTab);
+  });
+});

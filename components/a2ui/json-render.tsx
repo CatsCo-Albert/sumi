@@ -22,7 +22,7 @@
 
 import { schema } from "@json-render/react/schema";
 import { defineCatalog } from "@json-render/core";
-import { defineRegistry, Renderer } from "@json-render/react";
+import { defineRegistry, Renderer, JSONUIProvider } from "@json-render/react";
 import { shadcnComponents, shadcnComponentDefinitions } from "@json-render/shadcn";
 import { z } from "zod";
 import { parseSpec } from "@/lib/spec";
@@ -215,10 +215,17 @@ export function SumiSpecRenderer({ spec, className }: SumiSpecRendererProps) {
   }
   return (
     <div className={className}>
-      <Renderer
-        spec={parsed as Parameters<typeof Renderer>[0]["spec"]}
-        registry={registry}
-      />
+      {/* The provider is required, not optional: several shadcn components read
+          visibility and action context, and rendering without it throws
+          "useVisibility must be used within a VisibilityProvider". That throw
+          happens inside the tree, so the whole card disappears — a Spec failure
+          that looks like "the agent's UI didn't render". */}
+      <JSONUIProvider registry={registry}>
+        <Renderer
+          spec={parsed as Parameters<typeof Renderer>[0]["spec"]}
+          registry={registry}
+        />
+      </JSONUIProvider>
     </div>
   );
 }
