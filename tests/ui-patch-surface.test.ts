@@ -1,0 +1,135 @@
+/**
+ * The UI patch surface — which chrome an agent can actually drive.
+ *
+ * The recurring defect here is not a missing patch kind but a patch kind whose
+ * target lives in component-local state: the store updates, the screen does not,
+ * and from the outside the assistant "cannot change the UI". These cases pair each
+ * patch with the state the UI now reads from, so a future refactor that moves it
+ * back into local state fails here instead of in a user's session.
+ */
+
+import { describe, it, expect, beforeEach } from "vitest";
+import { validateUiPatch } from "../src/a2ui/validate";
+import { useUiStore } from "../stores/ui-store";
+
+function reset() {
+  useUiStore.setState({
+    sidebarTab: "outline",
+    projectView: "list",
+    panelVisibility: { sidebar: false, ai: false, inspector: false },
+    panelWidth: { sidebar: 22, ai: 34, inspector: 26 },
+    editorViewCommand: null,
+    focusRangeCommand: null,
+    promptCommand: null,
+    pendingPromptCommands: [],
+  });
+}
+
+beforeEach(reset);
+
+describe("validateUiPatch — new kinds", () => {
+  it("accepts each sidebar tab", () => {
+    for (const tab of ["outline", "members", "history"] as const) {
+      expect(validateUiPatch({ type: "set_sidebar_tab", tab })).toMatchObject({ tab });
+    }
+  });
+
+  it("accepts a visibility hint and rejects an unknown tab", () => {
+    expect(
+      validateUiPatch({ type: "set_sidebar_tab", tab: "members", visible: false })
+    ).toMatchObject({ visible: false });
+    expect(validateUiPatch({ type: "set_sidebar_tab", tab: "chat" })).toBeNull();
+    expect(validateUiPatch({ type: "set_sidebar_tab" })).toBeNull();
+  });
+
+  it("accepts both project views and rejects anything else", () => {
+    expect(validateUiPatch({ type: "set_project_view", view: "table" })).toMatchObject({
+      view: "table",
+    });
+    expect(validateUiPatch({ type: "set_project_view", view: "grid" })).toBeNull();
+  });
+});
+
+describe("applyUiPatch — sidebar tab", () => {
+  it("switches the tab the UI reads", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_sidebar_tab", tab: "members" });
+    expect(useUiStore.getState().sidebarTab).toBe("members");
+  });
+
+  it("opens the sidebar by default", () => {
+    // Selecting a tab nobody can see is a no-op from the user's side.
+    expect(useUiStore.getState().panelVisibility.sidebar).toBe(false);
+    useUiStore.getState().applyUiPatch({ type: "set_sidebar_tab", tab: "history" });
+    expect(useUiStore.getState().panelVisibility.sidebar).toBe(true);
+  });
+
+  it("honours an explicit visible:false", () => {
+    useUiStore.setState({ panelVisibility: { sidebar: true, ai: false, inspector: false } });
+    useUiStore
+      .getState()
+      .applyUiPatch({ type: "set_sidebar_tab", tab: "outline", visible: false });
+    expect(useUiStore.getState().panelVisibility.sidebar).toBe(false);
+    // The tab still changed: hiding is a separate instruction from selecting.
+    expect(useUiStore.getState().sidebarTab).toBe("outline");
+  });
+
+  it("raises attention on the sidebar", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_sidebar_tab", tab: "members" });
+    expect(useUiStore.getState().attentionSignal?.target).toBe("sidebar");
+  });
+
+  it("leaves the other panels alone", () => {
+    useUiStore.setState({ panelVisibility: { sidebar: false, ai: true, inspector: true } });
+    useUiStore.getState().applyUiPatch({ type: "set_sidebar_tab", tab: "members" });
+    const v = useUiStore.getState().panelVisibility;
+    expect(v.ai).toBe(true);
+    expect(v.inspector).toBe(true);
+  });
+});
+
+describe("applyUiPatch — project view", () => {
+  it("switches the list / table presentation", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_project_view", view: "table" });
+    expect(useUiStore.getState().projectView).toBe("table");
+    useUiStore.getState().applyUiPatch({ type: "set_project_view", view: "list" });
+    expect(useUiStore.getState().projectView).toBe("list");
+  });
+
+  it("does not open a panel or move the document", () => {
+    const before = useUiStore.getState();
+    useUiStore.getState().applyUiPatch({ type: "set_project_view", view: "table" });
+    const after = useUiStore.getState();
+    expect(after.panelVisibility).toEqual(before.panelVisibility);
+    expect(after.currentDocumentId).toBe(before.currentDocumentId);
+  });
+});
+
+describe("applyUiPatch — the whole chrome is reachable", () => {
+  it("can compose a full workspace arrangement from patches alone", () => {
+    // The point of the surface: each of these used to be either missing or wired to
+    // state the patch could not touch.
+    const { applyUiPatch } = useUiStore.getState();
+
+    applyUiPatch({ type: "open_document", documentId: "prj_a-notes.md" });
+    applyUiPatch({ type: "set_editor_view", view: "preview" });
+    applyUiPatch({ type: "set_sidebar_tab", tab: "outline" });
+    applyUiPatch({ type: "set_panel_size", panel: "sidebar", widthPercent: 30 });
+    applyUiPatch({ type: "set_project_view", view: "table" });
+
+    const s = useUiStore.getState();
+    expect(s.currentDocumentId).toBe("prj_a-notes.md");
+    expect(s.editorViewCommand?.view).toBe("preview");
+    expect(s.sidebarTab).toBe("outline");
+    expect(s.panelVisibility.sidebar).toBe(true);
+    expect(s.panelWidth.sidebar).toBe(30);
+    expect(s.projectView).toBe("table");
+  });
+
+  it("clamps an out-of-range panel width instead of applying it", () => {
+    const { applyUiPatch } = useUiStore.getState();
+    applyUiPatch({ type: "set_panel_size", panel: "sidebar", widthPercent: 200 });
+    expect(useUiStore.getState().panelWidth.sidebar).toBe(90);
+    applyUiPatch({ type: "set_panel_size", panel: "sidebar", widthPercent: 1 });
+    expect(useUiStore.getState().panelWidth.sidebar).toBe(10);
+  });
+});

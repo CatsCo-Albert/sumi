@@ -222,7 +222,11 @@ function EditorPane({
   // assistant's UI commands don't work".
   const sidebarOpen = useUiStore((s) => s.panelVisibility.sidebar);
   const setPanelVisibility = useUiStore((s) => s.setPanelVisibility);
-  const [sidebarTab, setSidebarTab] = useState<"outline" | "members" | "history">("outline");
+  // Tab selection lives in the store, for the same reason the visibility does:
+  // it is chrome the assistant should be able to drive, and state a patch cannot
+  // reach is state the assistant appears unable to touch.
+  const sidebarTab = useUiStore((s) => s.sidebarTab);
+  const setSidebarTab = useUiStore((s) => s.setSidebarTab);
   const [askOpen, setAskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings] = useEditorSettings();

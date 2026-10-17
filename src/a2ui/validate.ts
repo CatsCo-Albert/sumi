@@ -30,6 +30,15 @@ const uiPatchSchema = z.union([
     autoSend: z.boolean().optional(),
   }),
   z.object({
+    type: z.literal("set_sidebar_tab"),
+    tab: z.enum(["outline", "members", "history"]),
+    visible: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("set_project_view"),
+    view: z.enum(["list", "table"]),
+  }),
+  z.object({
     type: z.literal("focus_document_range"),
     documentId: z.string().min(1),
     startLine: z.number().int().min(1),

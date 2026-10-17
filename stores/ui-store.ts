@@ -48,6 +48,15 @@ interface UiStoreState {
   pendingPromptCommands: PromptCommand[];
   focusRangeCommand: FocusRangeCommand | null;
   /**
+   * Which sidebar tab is showing.
+   *
+   * Lives here rather than in the shell's local state so a patch can select it:
+   * a tab the assistant cannot reach is a tab the assistant cannot show you.
+   */
+  sidebarTab: "outline" | "members" | "history";
+  /** Project list presentation — the list / table toggle. */
+  projectView: "list" | "table";
+  /**
    * One-shot request to change the editor's view mode.
    *
    * The toggle is local component state today, so a patch cannot reach it by
@@ -63,6 +72,8 @@ interface UiStoreState {
   setActiveMainBlock: (block: WorkspaceMainBlock) => void;
   setPanelVisibility: (panel: PanelName, visible: boolean) => void;
   setPanelWidth: (panel: PanelName, widthPercent: number) => void;
+  setSidebarTab: (tab: "outline" | "members" | "history") => void;
+  setProjectView: (view: "list" | "table") => void;
   triggerAttention: (target: AttentionTarget, reason?: AttentionSignal["reason"]) => void;
   consumeAttention: () => void;
   consumePromptCommand: () => void;
@@ -87,6 +98,8 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   promptCommand: null,
   pendingPromptCommands: [],
   focusRangeCommand: null,
+  sidebarTab: "outline",
+  projectView: "list",
   editorViewCommand: null,
   lastRestore: null,
 
@@ -144,6 +157,9 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
         [panel]: Math.max(10, Math.min(90, widthPercent)),
       },
     })),
+
+  setSidebarTab: (tab) => set({ sidebarTab: tab }),
+  setProjectView: (view) => set({ projectView: view }),
 
   triggerAttention: (target, reason) =>
     set({ attentionSignal: signal(target, reason) }),
@@ -261,6 +277,24 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
             view: patch.view,
           },
         });
+        return;
+
+      case "set_sidebar_tab":
+        // Default to opening the sidebar: selecting a tab nobody can see would be
+        // a no-op from the user's side, which is the confusing half of a command
+        // that half-worked.
+        set((state) => ({
+          sidebarTab: patch.tab,
+          panelVisibility: {
+            ...state.panelVisibility,
+            sidebar: patch.visible ?? true,
+          },
+          attentionSignal: signal("sidebar"),
+        }));
+        return;
+
+      case "set_project_view":
+        set({ projectView: patch.view });
         return;
 
       case "doc_restored":
