@@ -57,6 +57,17 @@ interface UiStoreState {
   /** Project list presentation — the list / table toggle. */
   projectView: "list" | "table";
   /**
+   * Accent and density.
+   *
+   * Applied to the shell as data attributes rather than baked into a build: the
+   * primitives read their colours and radii from CSS tokens, so a patch can restyle
+   * the workspace without a redeploy.
+   */
+  theme: {
+    accent: "cyan" | "violet" | "emerald" | "amber" | "rose" | "slate";
+    density: "compact" | "comfortable";
+  };
+  /**
    * One-shot request to change the editor's view mode.
    *
    * The toggle is local component state today, so a patch cannot reach it by
@@ -74,6 +85,7 @@ interface UiStoreState {
   setPanelWidth: (panel: PanelName, widthPercent: number) => void;
   setSidebarTab: (tab: "outline" | "members" | "history") => void;
   setProjectView: (view: "list" | "table") => void;
+  setTheme: (next: Partial<UiStoreState["theme"]>) => void;
   triggerAttention: (target: AttentionTarget, reason?: AttentionSignal["reason"]) => void;
   consumeAttention: () => void;
   consumePromptCommand: () => void;
@@ -100,6 +112,7 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   focusRangeCommand: null,
   sidebarTab: "outline",
   projectView: "list",
+  theme: { accent: "cyan", density: "comfortable" },
   editorViewCommand: null,
   lastRestore: null,
 
@@ -160,6 +173,8 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
 
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
   setProjectView: (view) => set({ projectView: view }),
+  setTheme: (next) =>
+    set((state) => ({ theme: { ...state.theme, ...next } })),
 
   triggerAttention: (target, reason) =>
     set({ attentionSignal: signal(target, reason) }),
@@ -295,6 +310,17 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
 
       case "set_project_view":
         set({ projectView: patch.view });
+        return;
+
+      case "set_theme":
+        // Merged, not replaced: a patch that only changes the accent must leave the
+        // density alone, or every theme call would silently reset the other axis.
+        set((state) => ({
+          theme: {
+            accent: patch.accent ?? state.theme.accent,
+            density: patch.density ?? state.theme.density,
+          },
+        }));
         return;
 
       case "doc_restored":

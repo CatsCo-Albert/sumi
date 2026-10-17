@@ -39,6 +39,11 @@ const uiPatchSchema = z.union([
     view: z.enum(["list", "table"]),
   }),
   z.object({
+    type: z.literal("set_theme"),
+    accent: z.enum(["cyan", "violet", "emerald", "amber", "rose", "slate"]).optional(),
+    density: z.enum(["compact", "comfortable"]).optional(),
+  }),
+  z.object({
     type: z.literal("focus_document_range"),
     documentId: z.string().min(1),
     startLine: z.number().int().min(1),

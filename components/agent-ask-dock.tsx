@@ -31,6 +31,7 @@ import { parseSpec } from "@/lib/spec";
 import { SumiSpecRenderer } from "@/components/a2ui/json-render";
 import type { IntentRow } from "@/src/intents";
 import { toast } from "@/components/ui/toast";
+import { Button, Textarea } from "@/components/ui/primitives";
 
 interface AgentOption {
   subjectId: string;
@@ -197,13 +198,17 @@ export function AgentAskDock({
 
   if (!open) {
     return (
-      <button
+      // Composed from the primitive rather than a one-off button: the dock is
+      // chrome like everything else, and a hand-rolled control would ignore the
+      // accent and density tokens a theme patch changes.
+      <Button
+        variant="outline"
+        size="md"
         onClick={() => onOpenChange(true)}
         title="问 agent（⌘⇧I）"
         className={cn(
-          "group fixed bottom-5 right-5 z-40 flex items-center gap-1.5 rounded-full",
-          "border border-border/60 bg-background/80 px-3.5 py-2 text-[12px] font-medium",
-          "material-glass shadow-sm backdrop-blur transition-all duration-200",
+          "fixed bottom-5 right-5 z-40 h-auto rounded-full px-3.5 py-2",
+          "material-glass shadow-sm backdrop-blur",
           "hover:border-primary/40 hover:text-primary"
         )}
       >
@@ -211,7 +216,7 @@ export function AgentAskDock({
           ✦
         </span>
         问 agent
-      </button>
+      </Button>
     );
   }
 
@@ -252,7 +257,7 @@ export function AgentAskDock({
         </div>
 
         <div className="px-3 pb-1 pt-2.5">
-          <textarea
+          <Textarea
             ref={inputRef}
             rows={2}
             value={prompt}
@@ -267,7 +272,7 @@ export function AgentAskDock({
             placeholder={
               disabled ? "打开一篇文档后可用" : "想问什么？改哪一段、加什么、查什么…"
             }
-            className="w-full resize-none bg-transparent text-[13px] leading-6 outline-none placeholder:text-muted-foreground/50 disabled:opacity-50"
+            className="border-0 bg-transparent px-0 text-[13px] focus-visible:ring-0"
           />
         </div>
 
@@ -275,13 +280,15 @@ export function AgentAskDock({
           <span className="text-[10px] text-muted-foreground/50">
             {busy ? "发送中…" : "⌘↩ 发送 · Esc 收起"}
           </span>
-          <button
+          <Button
+            variant="default"
+            size="sm"
             onClick={() => void submit()}
             disabled={disabled || busy || !prompt.trim()}
-            className="ml-auto rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-opacity disabled:opacity-40"
+            className="ml-auto"
           >
             发送
-          </button>
+          </Button>
         </div>
 
         {status.kind !== "idle" && (

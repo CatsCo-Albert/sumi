@@ -55,6 +55,18 @@ export type UiPatch =
     }
   | {
       /**
+       * Accent colour and spacing density.
+       *
+       * Part of the reachable surface on purpose: every primitive reads these from
+       * CSS tokens, so changing the look is a value change. Anything that styled
+       * itself with literal colours would ignore this.
+       */
+      type: "set_theme";
+      accent?: "cyan" | "violet" | "emerald" | "amber" | "rose" | "slate";
+      density?: "compact" | "comfortable";
+    }
+  | {
+      /**
        * Editor view mode for the open document.
        *
        * Distinct from `set_main_block: "preview"`: that swaps the workspace pane,

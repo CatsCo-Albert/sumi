@@ -30,6 +30,7 @@ import { useEditStore } from "@/stores/edit-store";
 import DocumentListPane from "@/components/document-list-pane";
 import MarkdownPreview from "@/components/markdown-preview";
 import { Toaster } from "@/components/ui/toast";
+import { Button, Tabs } from "@/components/ui/primitives";
 import { useIntentStore } from "@/stores/intent-store";
 import { SettingsDialog, useEditorSettings } from "@/components/settings-dialog";
 import { useDocPersistence } from "@/lib/use-doc-persistence";
@@ -45,6 +46,9 @@ export default function WorkspaceShell() {
   const consumeAttention = useUiStore((s) => s.consumeAttention);
   const panelVisibility = useUiStore((s) => s.panelVisibility);
   const panelWidth = useUiStore((s) => s.panelWidth);
+  // Accent + density, applied as data attributes on the shell root so every
+  // primitive picks them up from the same CSS tokens.
+  const theme = useUiStore((s) => s.theme);
   const setCurrentDocumentId = useUiStore((s) => s.setCurrentDocumentId);
   const setPanelVisibility = useUiStore((s) => s.setPanelVisibility);
 
@@ -134,7 +138,13 @@ export default function WorkspaceShell() {
     : [null, null];
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-background text-foreground">
+    <div
+      className="relative h-screen w-full overflow-hidden bg-background text-foreground"
+      // Accent and density are read by every primitive through CSS tokens, so a
+      // `set_theme` patch restyles the workspace without a rebuild.
+      data-accent={theme.accent}
+      data-density={theme.density}
+    >
       {/* Canvas layer — main content.
           The ask dock floats over this rather than docking beside it: it is an
           interruption, not a workspace, so the document keeps its full width. */}
@@ -869,29 +879,18 @@ function SidePanel({
       style={{ width: `${sidebarWidth}%` }}
     >
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
-        <div className="flex items-center gap-0.5 rounded-md border border-border/60 p-0.5">
-          {(["outline", "members", "history"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={cn(
-                "rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
-                tab === t
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {t === "outline" ? "大纲" : t === "members" ? "成员" : "历史"}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={onClose}
-          className="text-[11px] text-muted-foreground/70 hover:text-foreground"
-          title="关闭"
-        >
+        <Tabs
+          value={tab}
+          onValueChange={setTab}
+          items={[
+            { value: "outline" as const, label: "大纲" },
+            { value: "members" as const, label: "成员" },
+            { value: "history" as const, label: "历史" },
+          ]}
+        />
+        <Button variant="ghost" size="icon" onClick={onClose} title="关闭">
           ✕
-        </button>
+        </Button>
       </div>
       {tab === "outline" ? (
         <OutlineSidebar
