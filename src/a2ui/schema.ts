@@ -42,6 +42,18 @@ export type UiPatch =
   | { type: "queue_prompt"; prompt: string; autoSend?: boolean }
   | { type: "focus_document_range"; documentId: string; startLine: number; endLine: number }
   | {
+      /** Which sidebar tab is showing (outline / members / history). */
+      type: "set_sidebar_tab";
+      tab: "outline" | "members" | "history";
+      /** Open the sidebar too; defaults to true so the tab is actually visible. */
+      visible?: boolean;
+    }
+  | {
+      /** Project list presentation — the list / table toggle. */
+      type: "set_project_view";
+      view: "list" | "table";
+    }
+  | {
       /**
        * Editor view mode for the open document.
        *
