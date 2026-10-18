@@ -55,6 +55,17 @@ export type UiPatch =
     }
   | {
       /**
+       * Workspace skeleton.
+       *
+       * Distinct from `set_panel_visibility` (whether a panel exists) and
+       * `set_panel_size` (how big it is): this is *where* it sits. Moving the
+       * sidebar to the left is a different arrangement, not a different width.
+       */
+      type: "set_layout";
+      sidebarSide?: "left" | "right";
+    }
+  | {
+      /**
        * Accent colour and spacing density.
        *
        * Part of the reachable surface on purpose: every primitive reads these from

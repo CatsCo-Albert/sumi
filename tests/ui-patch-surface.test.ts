@@ -17,6 +17,7 @@ function reset() {
     sidebarTab: "outline",
     projectView: "list",
     panelVisibility: { sidebar: false, ai: false, inspector: false },
+    layout: { sidebarSide: "right" },
     panelWidth: { sidebar: 22, ai: 34, inspector: 26 },
     editorViewCommand: null,
     focusRangeCommand: null,
@@ -177,5 +178,40 @@ describe("applyUiPatch — theme", () => {
     expect(after.panelVisibility).toEqual(before.panelVisibility);
     expect(after.currentDocumentId).toBe(before.currentDocumentId);
     expect(after.sidebarTab).toBe(before.sidebarTab);
+  });
+});
+
+describe("applyUiPatch — layout", () => {
+  it("moves the sidebar to either edge", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_layout", sidebarSide: "left" });
+    expect(useUiStore.getState().layout.sidebarSide).toBe("left");
+    useUiStore.getState().applyUiPatch({ type: "set_layout", sidebarSide: "right" });
+    expect(useUiStore.getState().layout.sidebarSide).toBe("right");
+  });
+
+  it("merges, so an empty patch leaves the skeleton alone", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_layout", sidebarSide: "left" });
+    useUiStore.getState().applyUiPatch({ type: "set_layout" });
+    expect(useUiStore.getState().layout.sidebarSide).toBe("left");
+  });
+
+  it("rejects an edge that is not a side", () => {
+    expect(validateUiPatch({ type: "set_layout", sidebarSide: "top" })).toBeNull();
+    expect(validateUiPatch({ type: "set_layout" })).not.toBeNull();
+  });
+
+  it("is independent of visibility and width", () => {
+    // Three different questions: where it sits, whether it exists, how wide it is.
+    // Conflating them is how a "layout" patch ends up silently resizing the panel.
+    useUiStore.setState({
+      panelVisibility: { sidebar: true, ai: false, inspector: false },
+      panelWidth: { sidebar: 30, ai: 34, inspector: 26 },
+    });
+    useUiStore.getState().applyUiPatch({ type: "set_layout", sidebarSide: "left" });
+
+    const s = useUiStore.getState();
+    expect(s.layout.sidebarSide).toBe("left");
+    expect(s.panelVisibility.sidebar).toBe(true);
+    expect(s.panelWidth.sidebar).toBe(30);
   });
 });

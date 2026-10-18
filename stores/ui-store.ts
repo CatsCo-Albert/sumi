@@ -68,6 +68,14 @@ interface UiStoreState {
     density: "compact" | "comfortable";
   };
   /**
+   * Workspace skeleton — where panels sit, as opposed to whether they exist
+   * (`panelVisibility`) or how wide they are (`panelWidth`).
+   */
+  layout: {
+    /** Which edge the editor sidebar docks to. */
+    sidebarSide: "left" | "right";
+  };
+  /**
    * One-shot request to change the editor's view mode.
    *
    * The toggle is local component state today, so a patch cannot reach it by
@@ -86,6 +94,7 @@ interface UiStoreState {
   setSidebarTab: (tab: "outline" | "members" | "history") => void;
   setProjectView: (view: "list" | "table") => void;
   setTheme: (next: Partial<UiStoreState["theme"]>) => void;
+  setLayout: (next: Partial<UiStoreState["layout"]>) => void;
   triggerAttention: (target: AttentionTarget, reason?: AttentionSignal["reason"]) => void;
   consumeAttention: () => void;
   consumePromptCommand: () => void;
@@ -113,6 +122,7 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   sidebarTab: "outline",
   projectView: "list",
   theme: { accent: "cyan", density: "comfortable" },
+  layout: { sidebarSide: "right" },
   editorViewCommand: null,
   lastRestore: null,
 
@@ -175,6 +185,8 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   setProjectView: (view) => set({ projectView: view }),
   setTheme: (next) =>
     set((state) => ({ theme: { ...state.theme, ...next } })),
+  setLayout: (next) =>
+    set((state) => ({ layout: { ...state.layout, ...next } })),
 
   triggerAttention: (target, reason) =>
     set({ attentionSignal: signal(target, reason) }),
@@ -310,6 +322,16 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
 
       case "set_project_view":
         set({ projectView: patch.view });
+        return;
+
+      case "set_layout":
+        // Merged like the theme: naming only the sidebar side must not reset
+        // anything else that belongs to the skeleton later.
+        set((state) => ({
+          layout: {
+            sidebarSide: patch.sidebarSide ?? state.layout.sidebarSide,
+          },
+        }));
         return;
 
       case "set_theme":

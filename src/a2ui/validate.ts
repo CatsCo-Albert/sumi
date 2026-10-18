@@ -39,6 +39,10 @@ const uiPatchSchema = z.union([
     view: z.enum(["list", "table"]),
   }),
   z.object({
+    type: z.literal("set_layout"),
+    sidebarSide: z.enum(["left", "right"]).optional(),
+  }),
+  z.object({
     type: z.literal("set_theme"),
     accent: z.enum(["cyan", "violet", "emerald", "amber", "rose", "slate"]).optional(),
     density: z.enum(["compact", "comfortable"]).optional(),

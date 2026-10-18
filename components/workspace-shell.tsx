@@ -512,6 +512,37 @@ function EditorPane({
     return () => store.setNavigateToFileCallback(null);
   }, [projectId, fileId, router]);
 
+  // The sidebar is built once and placed on whichever edge the layout names.
+  // Placing it by rendering it in one of two positions would duplicate this prop
+  // list, and the copies would drift.
+  const sidebarSide = useUiStore((s) => s.layout.sidebarSide);
+  const sidePanel = sidebarOpen ? (
+    <SidePanel
+      tab={sidebarTab}
+      setTab={setSidebarTab}
+      onClose={() => toggleSidebar()}
+      side={sidebarSide}
+      view={editorViewRef.current}
+      content={currentContent || initialContent || ""}
+      cursorLine={cursorLine}
+      collaborators={collaborators}
+      members={members}
+      memberPresence={memberPresence}
+      contacts={contacts}
+      contactsLoading={contactsLoading}
+      addMemberMode={addMemberMode}
+      setAddMemberMode={setAddMemberMode}
+      newMemberId={newMemberId}
+      setNewMemberId={setNewMemberId}
+      newMemberRole={newMemberRole}
+      setNewMemberRole={setNewMemberRole}
+      onAddMember={addMember}
+      onAddMemberManual={addMemberManual}
+      projectId={projectId}
+      fileId={fileId}
+    />
+  ) : null;
+
   return (
     <div
       className={cn(
@@ -668,6 +699,7 @@ function EditorPane({
           />
         ) : viewMode === "split" ? (
           <div className="flex h-full">
+            {sidebarSide === "left" && sidePanel}
             <div className="flex-1 overflow-hidden border-r border-border/60">
               <CollaborativeEditor
                 projectId={projectId}
@@ -689,34 +721,11 @@ function EditorPane({
             <div className="flex-1 overflow-auto bg-background">
               <MarkdownPreview content={currentContent || initialContent || ""} />
             </div>
-            {sidebarOpen && (
-              <SidePanel
-                tab={sidebarTab}
-                setTab={setSidebarTab}
-                onClose={() => toggleSidebar()}
-                view={editorViewRef.current}
-                content={currentContent || initialContent || ""}
-                cursorLine={cursorLine}
-                collaborators={collaborators}
-                members={members}
-                memberPresence={memberPresence}
-                contacts={contacts}
-                contactsLoading={contactsLoading}
-                addMemberMode={addMemberMode}
-                setAddMemberMode={setAddMemberMode}
-                newMemberId={newMemberId}
-                setNewMemberId={setNewMemberId}
-                newMemberRole={newMemberRole}
-                setNewMemberRole={setNewMemberRole}
-                onAddMember={addMember}
-                onAddMemberManual={addMemberManual}
-                projectId={projectId}
-                fileId={fileId}
-              />
-            )}
+            {sidebarSide === "right" && sidePanel}
           </div>
         ) : (
           <div className="flex h-full">
+            {sidebarSide === "left" && sidePanel}
             <div className="min-w-0 flex-1 overflow-hidden">
               <CollaborativeEditor
                 projectId={projectId}
@@ -735,31 +744,7 @@ function EditorPane({
                 onConnectionStatusChange={setConnStatus}
               />
             </div>
-            {sidebarOpen && (
-              <SidePanel
-                tab={sidebarTab}
-                setTab={setSidebarTab}
-                onClose={() => toggleSidebar()}
-                view={editorViewRef.current}
-                content={currentContent || initialContent || ""}
-                cursorLine={cursorLine}
-                collaborators={collaborators}
-                members={members}
-                memberPresence={memberPresence}
-                contacts={contacts}
-                contactsLoading={contactsLoading}
-                addMemberMode={addMemberMode}
-                setAddMemberMode={setAddMemberMode}
-                newMemberId={newMemberId}
-                setNewMemberId={setNewMemberId}
-                newMemberRole={newMemberRole}
-                setNewMemberRole={setNewMemberRole}
-                onAddMember={addMember}
-                onAddMemberManual={addMemberManual}
-                projectId={projectId}
-                fileId={fileId}
-              />
-            )}
+            {sidebarSide === "right" && sidePanel}
           </div>
         )}
       </div>
@@ -840,8 +825,11 @@ function SidePanel({
   onAddMemberManual,
   projectId,
   fileId,
+  side = "right",
 }: {
   tab: "outline" | "members" | "history";
+  /** Which edge the panel is docked to — decides the divider's side. */
+  side?: "left" | "right";
   setTab: (t: "outline" | "members" | "history") => void;
   onClose: () => void;
   view: EditorView | null;
@@ -875,7 +863,12 @@ function SidePanel({
 
   return (
     <aside
-      className="flex min-w-[200px] shrink-0 flex-col border-l border-border/60 bg-background"
+      className={cn(
+        "flex min-w-[200px] shrink-0 flex-col bg-background",
+        // The divider belongs on the edge facing the editor. A left-docked panel
+        // with a left border would draw a line against the window instead.
+        side === "left" ? "border-r border-border/60" : "border-l border-border/60"
+      )}
       style={{ width: `${sidebarWidth}%` }}
     >
       <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/60 px-3">
