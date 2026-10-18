@@ -74,6 +74,14 @@ interface UiStoreState {
   layout: {
     /** Which edge the editor sidebar docks to. */
     sidebarSide: "left" | "right";
+    /**
+     * Share of the split view given to the editor, 0.2–0.8.
+     *
+     * Only meaningful in the split view. Bounded because a pane narrower than a
+     * fifth is not usable, and an unbounded ratio would let a stray value hide one
+     * of the two panes entirely — which reads as "the preview broke".
+     */
+    splitRatio: number;
   };
   /**
    * One-shot request to change the editor's view mode.
@@ -122,7 +130,7 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   sidebarTab: "outline",
   projectView: "list",
   theme: { accent: "cyan", density: "comfortable" },
-  layout: { sidebarSide: "right" },
+  layout: { sidebarSide: "right", splitRatio: 0.5 },
   editorViewCommand: null,
   lastRestore: null,
 
@@ -325,11 +333,17 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
         return;
 
       case "set_layout":
-        // Merged like the theme: naming only the sidebar side must not reset
-        // anything else that belongs to the skeleton later.
+        // Merged like the theme: naming only the sidebar side must not reset the
+        // split ratio, or a "move the panel" call would silently re-proportion the
+        // editor. Clamped here as well as in the validator, because the store is
+        // also reached by the drag handler.
         set((state) => ({
           layout: {
             sidebarSide: patch.sidebarSide ?? state.layout.sidebarSide,
+            splitRatio:
+              typeof patch.splitRatio === "number"
+                ? Math.min(0.8, Math.max(0.2, patch.splitRatio))
+                : state.layout.splitRatio,
           },
         }));
         return;

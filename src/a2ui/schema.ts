@@ -63,6 +63,8 @@ export type UiPatch =
        */
       type: "set_layout";
       sidebarSide?: "left" | "right";
+      /** Share of the split view for the editor, 0.2–0.8. */
+      splitRatio?: number;
     }
   | {
       /**

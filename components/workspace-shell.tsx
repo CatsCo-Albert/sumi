@@ -516,6 +516,49 @@ function EditorPane({
   // Placing it by rendering it in one of two positions would duplicate this prop
   // list, and the copies would drift.
   const sidebarSide = useUiStore((s) => s.layout.sidebarSide);
+  const splitRatio = useUiStore((s) => s.layout.splitRatio);
+  const setLayout = useUiStore((s) => s.setLayout);
+  const splitRowRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Drag the divider between editor and preview.
+   *
+   * The ratio is measured against the space the two panes actually share, not the
+   * container: with the sidebar docked, the container is wider, and dividing by it
+   * would make the same drag move the divider less on one side than the other.
+   *
+   * Listener cleanup is on `window` rather than the handle because a fast drag
+   * leaves the handle behind, and a pointerup delivered elsewhere would otherwise
+   * leave the handler attached forever.
+   */
+  const startSplitDrag = (event: React.MouseEvent) => {
+    const row = splitRowRef.current;
+    if (!row) return;
+    event.preventDefault();
+
+    const aside = row.querySelector("aside");
+    const rowWidth = row.getBoundingClientRect().width;
+    const shared = rowWidth - (aside ? aside.getBoundingClientRect().width : 0);
+    if (shared <= 0) return;
+
+    const startX = event.clientX;
+    const startRatio = splitRatio;
+
+    const move = (e: MouseEvent) => {
+      setLayout({ splitRatio: startRatio + (e.clientX - startX) / shared });
+    };
+    const stop = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", stop);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", stop);
+  };
   const sidePanel = sidebarOpen ? (
     <SidePanel
       tab={sidebarTab}
@@ -698,9 +741,12 @@ function EditorPane({
             className="h-full overflow-auto"
           />
         ) : viewMode === "split" ? (
-          <div className="flex h-full">
+          <div className="flex h-full" ref={splitRowRef}>
             {sidebarSide === "left" && sidePanel}
-            <div className="flex-1 overflow-hidden border-r border-border/60">
+            <div
+              className="min-w-0 overflow-hidden"
+              style={{ flex: `0 0 ${splitRatio * 100}%` }}
+            >
               <CollaborativeEditor
                 projectId={projectId}
                 fileId={fileId}
@@ -718,7 +764,16 @@ function EditorPane({
                 onConnectionStatusChange={setConnStatus}
               />
             </div>
-            <div className="flex-1 overflow-auto bg-background">
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="拖动调整编辑与预览的宽度"
+              onMouseDown={startSplitDrag}
+              onDoubleClick={() => setLayout({ splitRatio: 0.5 })}
+              title="拖动调整分栏 · 双击回到各半"
+              className="w-1 shrink-0 cursor-col-resize bg-border/50 transition-colors hover:bg-primary/40"
+            />
+            <div className="min-w-0 flex-1 overflow-auto bg-background">
               <MarkdownPreview content={currentContent || initialContent || ""} />
             </div>
             {sidebarSide === "right" && sidePanel}
