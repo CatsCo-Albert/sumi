@@ -41,6 +41,9 @@ const uiPatchSchema = z.union([
   z.object({
     type: z.literal("set_layout"),
     sidebarSide: z.enum(["left", "right"]).optional(),
+    // Clamped at the edges of the surface rather than trusted: a ratio outside this
+    // range hides one pane, which looks like a broken view rather than a setting.
+    splitRatio: z.number().min(0.2).max(0.8).optional(),
   }),
   z.object({
     type: z.literal("set_theme"),

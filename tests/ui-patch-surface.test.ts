@@ -17,7 +17,7 @@ function reset() {
     sidebarTab: "outline",
     projectView: "list",
     panelVisibility: { sidebar: false, ai: false, inspector: false },
-    layout: { sidebarSide: "right" },
+    layout: { sidebarSide: "right", splitRatio: 0.5 },
     panelWidth: { sidebar: 22, ai: 34, inspector: 26 },
     editorViewCommand: null,
     focusRangeCommand: null,
@@ -213,5 +213,31 @@ describe("applyUiPatch — layout", () => {
     expect(s.layout.sidebarSide).toBe("left");
     expect(s.panelVisibility.sidebar).toBe(true);
     expect(s.panelWidth.sidebar).toBe(30);
+  });
+});
+
+describe("applyUiPatch — split ratio", () => {
+  it("re-proportions the split view", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_layout", splitRatio: 0.3 });
+    expect(useUiStore.getState().layout.splitRatio).toBe(0.3);
+  });
+
+  it("clamps rather than hiding a pane", () => {
+    // A vanishing pane reads as "the preview broke", not as an out-of-range number.
+    useUiStore.getState().applyUiPatch({ type: "set_layout", splitRatio: 0.01 });
+    expect(useUiStore.getState().layout.splitRatio).toBe(0.2);
+    useUiStore.getState().applyUiPatch({ type: "set_layout", splitRatio: 4 });
+    expect(useUiStore.getState().layout.splitRatio).toBe(0.8);
+  });
+
+  it("does not move the panel when only the ratio changes", () => {
+    useUiStore.getState().applyUiPatch({ type: "set_layout", sidebarSide: "right" });
+    useUiStore.getState().applyUiPatch({ type: "set_layout", splitRatio: 0.35 });
+    expect(useUiStore.getState().layout.sidebarSide).toBe("right");
+  });
+
+  it("rejects a ratio that is not a number", () => {
+    expect(validateUiPatch({ type: "set_layout", splitRatio: "half" })).toBeNull();
+    expect(validateUiPatch({ type: "set_layout", splitRatio: -1 })).toBeNull();
   });
 });
