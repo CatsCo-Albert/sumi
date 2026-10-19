@@ -74,7 +74,9 @@ const uiPatchSchema = z.union([
       "intent_closed",
     ]),
     projectId: z.string().min(1),
-    fileId: z.string().min(1),
+    // A project-scope ask carries no document. Rejecting null here would drop the
+    // whole lifecycle broadcast client-side, so the asker would never see an answer.
+    fileId: z.string().nullable(),
     intent: z.unknown().optional(),
     intentId: z.string().optional(),
   }),

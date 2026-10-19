@@ -46,7 +46,13 @@ export interface EditorToolbarProps {
   tapAvailable?: boolean;
   tapEnabled?: boolean;
   onTapToggle?: () => void;
-  /** Cmd+Shift+I — open the ask-agent dialog. */
+  /**
+   * Cmd+Shift+I — open the ask-agent dialog when a selection exists.
+   *
+   * Not a button: the ask dock already floats over the editor, and two controls for
+   * one action two centimetres apart is a duplicate, not a convenience. The shortcut
+   * stays because it carries the selection, which the dock cannot know about.
+   */
   onAskAgent?: () => void;
   className?: string;
 }
@@ -803,20 +809,6 @@ export function EditorToolbar({
             )}
           >
             TAP
-          </button>
-        )}
-        {onAskAgent && (
-          <button
-            type="button"
-            onClick={onAskAgent}
-            title="问 agent (⌘⇧I)"
-            onMouseDown={(e) => e.preventDefault()}
-            className="flex h-7 items-center gap-1 rounded-md border border-border/60 px-2 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            问 agent
-            <kbd className="rounded border border-border/60 px-1 text-[9px] text-muted-foreground/70">
-              ⌘⇧I
-            </kbd>
           </button>
         )}
       </div>

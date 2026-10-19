@@ -119,8 +119,17 @@ export default function DocumentListPane() {
   // chrome that lives in local state.
   const viewMode = useUiStore((s) => s.projectView);
   const setViewMode = useUiStore((s) => s.setProjectView);
+  const setCurrentProjectId = useUiStore((s) => s.setCurrentProjectId);
   const [renamingProject, setRenamingProject] = useState(false);
   const [projectRenameValue, setProjectRenameValue] = useState("");
+
+  // Publish the selection so the ask dock can ask into this project before any
+  // document is open. `selected` stays this pane's own state — it drives the file
+  // tree — but the dock lives in the shell and cannot see it, which is why asking
+  // from here was impossible rather than merely awkward.
+  useEffect(() => {
+    setCurrentProjectId(selected?.id ?? null);
+  }, [selected, setCurrentProjectId]);
 
   useEffect(() => {
     const v = localStorage.getItem("sumi:proj-view");

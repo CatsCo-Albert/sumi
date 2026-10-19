@@ -9,7 +9,25 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { WebsocketProvider } from "y-websocket";
 import { broadcastPageState, registerProvider } from "../lib/provider-registry";
+
+/**
+ * The registry touches three things on a provider: awareness, the `sync` event,
+ * and nothing else. Standing up a real WebsocketProvider would need a server, so
+ * the double implements exactly that surface and is cast at the boundary — the
+ * alternative is asserting against a fake whose unrelated fields are all invented.
+ */
+type ProviderLike = {
+  awareness: {
+    setLocalStateField(key: string, value: unknown): void;
+    getLocalStateField(key: string): unknown;
+  };
+  on(event: string, fn: () => void): void;
+  off(event: string, fn: () => void): void;
+};
+
+const asProvider = (p: ProviderLike) => p as unknown as WebsocketProvider;
 
 /** Minimal stand-in for a WebsocketProvider: only awareness and the sync event. */
 function fakeProvider() {
@@ -54,7 +72,7 @@ describe("pageState broadcast", () => {
     broadcastPageState(state("prj-notes.md"));
     // …and only then does the editor register its provider.
     const provider = fakeProvider();
-    const unregister = registerProvider("prj-notes.md", provider);
+    const unregister = registerProvider("prj-notes.md", asProvider(provider));
 
     expect(provider.pageState()?.currentDocumentId).toBe("prj-notes.md");
     unregister();
@@ -62,7 +80,7 @@ describe("pageState broadcast", () => {
 
   it("keeps publishing to providers that were already registered", () => {
     const provider = fakeProvider();
-    const unregister = registerProvider("prj-existing.md", provider);
+    const unregister = registerProvider("prj-existing.md", asProvider(provider));
 
     broadcastPageState(state("prj-existing.md"));
     expect(provider.pageState()?.currentDocumentId).toBe("prj-existing.md");
@@ -73,7 +91,7 @@ describe("pageState broadcast", () => {
     // Awareness written before the socket is open is not guaranteed to be in the
     // handshake, so the field is written again once sync lands.
     const provider = fakeProvider();
-    const unregister = registerProvider("prj-late.md", provider);
+    const unregister = registerProvider("prj-late.md", asProvider(provider));
 
     broadcastPageState(state("prj-late.md"));
     provider.awareness.setLocalStateField("pageState", undefined);
@@ -85,7 +103,7 @@ describe("pageState broadcast", () => {
 
   it("stops after unregistering, and stops listening for sync", () => {
     const provider = fakeProvider();
-    const unregister = registerProvider("prj-gone.md", provider);
+    const unregister = registerProvider("prj-gone.md", asProvider(provider));
     // Registering applies the retained state, which is the point of the replay.
     // What must stop is the *updates* after unregistering.
     const atRegistration = provider.pageState()?.currentDocumentId;

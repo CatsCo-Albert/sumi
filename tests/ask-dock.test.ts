@@ -156,6 +156,26 @@ describe("askDockState", () => {
     expect(state.kind).toBe("waiting");
   });
 
+  it("keeps a project-scope ask visible while a document is open", () => {
+    // Asked from the project list, answered while the user is in a document. If the
+    // scope filter dropped it, the answer would vanish at the moment the user went
+    // looking for somewhere to apply it — the row exists and the dock says nothing.
+    const projectScoped = intent({ fileId: null, status: "answered", answerText: "先补测试" });
+    expect(askDockState([projectScoped], SCOPE)).toEqual({
+      kind: "answered",
+      prompt: "改一下标题",
+      answer: "先补测试",
+      editId: null,
+    });
+  });
+
+  it("still hides another document's ask from this document", () => {
+    // The other direction, which must not regress into "show everything": a
+    // doc-scoped ask belongs to its document alone.
+    const other = intent({ fileId: "other.md", status: "answered", answerText: "别处" });
+    expect(askDockState([other], SCOPE)).toEqual({ kind: "idle" });
+  });
+
   it("handles rows with missing timestamps", () => {
     const a = intent({ id: "a", createdAt: null });
     const b = intent({ id: "b", createdAt: 5, prompt: "有时间的那个" });

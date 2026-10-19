@@ -39,7 +39,8 @@ async function actorAndRole(
 
 async function broadcastToMembers(
   projectId: string,
-  fileId: string,
+  /** null for an ask that is not about a particular document. */
+  fileId: string | null,
   patchType:
     | "intent_created"
     | "intent_claimed"
@@ -115,10 +116,15 @@ export async function POST(request: Request) {
     threadId?: string;
   };
 
-  const { projectId, fileId, prompt, targetAgentId, selectionStart, selectionEnd, selectionText, threadId } = body;
-  if (!projectId || !fileId || !prompt || !prompt.trim()) {
+  const { projectId, prompt, targetAgentId, selectionStart, selectionEnd, selectionText, threadId } = body;
+  // `fileId` is optional: a question can be about the project rather than about a
+  // document, which is what you ask from the project list before opening anything.
+  // An empty string is treated as absent rather than as a filename, because a
+  // reader downstream cannot tell "" from a real file.
+  const fileId = body.fileId?.trim() ? body.fileId.trim() : null;
+  if (!projectId || !prompt || !prompt.trim()) {
     return Response.json(
-      { error: "projectId, fileId, prompt required" },
+      { error: "projectId, prompt required" },
       { status: 400 }
     );
   }

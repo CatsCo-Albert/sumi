@@ -1,5 +1,9 @@
 /**
- * Intents — "ask an agent" requests anchored to a doc region.
+ * Intents — "ask an agent" requests.
+ *
+ * Usually anchored to a doc region (a line range the human selected), but not
+ * necessarily: `file_id` is null when the question is about the project as a whole,
+ * which is what you can ask from the project list before opening anything.
  *
  * Lifecycle:
  *   open    — created, broadcasting to target agent (or all agents if none specified)
@@ -17,7 +21,8 @@ import type { DatabaseSync } from "node:sqlite";
 export interface IntentRow {
   id: string;
   projectId: string;
-  fileId: string;
+  /** The document the ask is about. null = asked at project scope, no doc open. */
+  fileId: string | null;
   selectionStart: number | null;
   selectionEnd: number | null;
   selectionText: string | null;
@@ -42,7 +47,7 @@ function rowToIntent(r: any): IntentRow {
   return {
     id: r.id,
     projectId: r.project_id,
-    fileId: r.file_id,
+    fileId: r.file_id ?? null,
     selectionStart: r.selection_start ?? null,
     selectionEnd: r.selection_end ?? null,
     selectionText: r.selection_text ?? null,
@@ -65,7 +70,8 @@ export function addIntent(
   db: DatabaseSync,
   input: {
     projectId: string;
-    fileId: string;
+    /** Omit for a project-scope ask — there is no document to anchor it to. */
+    fileId?: string | null;
     prompt: string;
     authorId: string;
     authorName?: string;
@@ -88,7 +94,7 @@ export function addIntent(
   ).run(
     intentId,
     input.projectId,
-    input.fileId,
+    input.fileId ?? null,
     input.selectionStart ?? null,
     input.selectionEnd ?? null,
     input.selectionText ?? null,

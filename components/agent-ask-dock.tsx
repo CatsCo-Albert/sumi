@@ -62,7 +62,10 @@ export function AgentAskDock({
   const promptCommand = useUiStore((s) => s.promptCommand);
   const consumePromptCommand = useUiStore((s) => s.consumePromptCommand);
 
-  const disabled = !projectId || !fileId;
+  // A project is enough to ask into. Requiring a document was what made the dock
+  // unusable outside the editor: the button was visible on the project list and the
+  // box behind it refused every keystroke.
+  const disabled = !projectId;
 
   // Intent patches are routed by scope; without this the store would drop
   // everything aimed at the document on screen.
@@ -162,7 +165,11 @@ export function AgentAskDock({
     if (!text || busy || disabled) return;
     setBusy(true);
     try {
-      const body: Record<string, unknown> = { projectId, fileId, prompt: text };
+      // fileId is sent only when there is one: the route reads an absent fileId as
+      // "this question is about the project", which is a different scope rather than
+      // a missing field.
+      const body: Record<string, unknown> = { projectId, prompt: text };
+      if (fileId) body.fileId = fileId;
       if (targetAgent) body.targetAgentId = targetAgent;
       const res = await fetch(apiPath("/api/intents"), {
         method: "POST",
@@ -270,7 +277,7 @@ export function AgentAskDock({
             }}
             disabled={disabled || busy}
             placeholder={
-              disabled ? "打开一篇文档后可用" : "想问什么？改哪一段、加什么、查什么…"
+              disabled ? "先选一个项目" : "想问什么？改哪一段、加什么、查什么…"
             }
             className="border-0 bg-transparent px-0 text-[13px] focus-visible:ring-0"
           />

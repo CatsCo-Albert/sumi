@@ -15,7 +15,8 @@ function freshDb(): DatabaseSync {
     CREATE TABLE intents (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
-      file_id TEXT NOT NULL,
+      -- Nullable since v9: a question can be about the project, not a document.
+      file_id TEXT,
       selection_start INTEGER,
       selection_end INTEGER,
       selection_text TEXT,
@@ -65,6 +66,36 @@ describe("intents", () => {
     expect(b.threadId).toBe(a.threadId);
     const inThread = listIntents(db, { threadId: a.threadId });
     expect(inThread).toHaveLength(2);
+  });
+
+  it("accepts an ask with no document", () => {
+    // What the project list asks: there is no file to anchor it to, and inventing
+    // an empty string would read downstream as a real filename.
+    const i = addIntent(db, {
+      projectId: "prj_x",
+      prompt: "这个项目接下来该做什么",
+      authorId: "u_alice",
+    });
+    expect(i.fileId).toBeNull();
+
+    const back = getIntent(db, i.id)!;
+    expect(back.fileId).toBeNull();
+  });
+
+  it("keeps document-scoped and project-scoped asks distinguishable", () => {
+    const doc = addIntent(db, {
+      projectId: "prj_x", fileId: "notes.md", prompt: "改标题", authorId: "u_a",
+    });
+    const project = addIntent(db, {
+      projectId: "prj_x", prompt: "项目问题", authorId: "u_a",
+    });
+
+    // Filtering by a file must not pick up the project-scope row, or every doc's
+    // ask list would silently include questions asked about the whole project.
+    expect(listIntents(db, { projectId: "prj_x", fileId: "notes.md" }).map((r) => r.id))
+      .toEqual([doc.id]);
+    expect(listIntents(db, { projectId: "prj_x" }).map((r) => r.id).sort())
+      .toEqual([doc.id, project.id].sort());
   });
 
   it("status lifecycle: open → claimed → answered", () => {

@@ -42,6 +42,7 @@ export default function WorkspaceShell() {
   const inviteToken = searchParams.get("invite");
 
   const currentDocumentId = useUiStore((s) => s.currentDocumentId);
+  const currentProjectId = useUiStore((s) => s.currentProjectId);
   const activeMainBlock = useUiStore((s) => s.activeMainBlock);
   const attentionSignal = useUiStore((s) => s.attentionSignal);
   const consumeAttention = useUiStore((s) => s.consumeAttention);
@@ -134,9 +135,11 @@ export default function WorkspaceShell() {
   const aiOpen = panelVisibility.ai;
   const attentionTarget = attentionSignal?.target;
 
-  const [aiProjectId, aiFileId] = currentDocumentId
-    ? splitDocId(currentDocumentId)
-    : [null, null];
+  // Which project the dock asks into. With a document open that is the document's
+  // project; without one it is whatever the list pane has selected, so a question
+  // can be asked before opening anything.
+  const aiProjectId = currentDocumentId ? splitDocId(currentDocumentId)[0] : currentProjectId;
+  const aiFileId = currentDocumentId ? splitDocId(currentDocumentId)[1] : null;
 
   return (
     <div

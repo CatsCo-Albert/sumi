@@ -207,6 +207,62 @@ const MIGRATIONS: Array<{ version: number; sql: string }> = [
         ON doc_versions(project_id, file_id, created_at DESC);
     `,
   },
+  {
+    version: 9,
+    sql: `
+      -- 提问不再必须锚定到某篇文档。
+      --
+      -- 「问 agent」原先要求 file_id，于是只在编辑器里有入口：项目列表页想提问
+      -- 时无处可放，只能把入口做成禁用。用一个空串当假文件名是更小的改动，但空
+      -- 串看起来就像一个真文件——读文档、生成待审改动都会照着一个不存在的路径走，
+      -- 而失败会出现在很久之后的另一段代码里。让这一列可空，把「没有文档」写成
+      -- NULL，是唯一一处能让下游一眼分辨的状态。
+      --
+      -- SQLite 不能把 NOT NULL 改成可空，只能重建表再搬数据。索引随旧表一起
+      -- 消失，重建。没有任何表引用 intents，所以 drop 不会牵连别的表。
+      CREATE TABLE intents_v9 (
+        id               TEXT PRIMARY KEY,
+        project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        file_id          TEXT,
+        selection_start  INTEGER,
+        selection_end    INTEGER,
+        selection_text   TEXT,
+        prompt           TEXT NOT NULL,
+        author_id        TEXT NOT NULL,
+        author_name      TEXT,
+        target_agent_id  TEXT,
+        thread_id        TEXT,
+        status           TEXT NOT NULL CHECK (status IN ('open','claimed','answered','closed'))
+                         DEFAULT 'open',
+        answer_text      TEXT,
+        answer_edit_id   TEXT,
+        answered_by      TEXT,
+        created_at       INTEGER NOT NULL,
+        claimed_at       INTEGER,
+        answered_at      INTEGER
+      );
+      INSERT INTO intents_v9 (
+        id, project_id, file_id, selection_start, selection_end, selection_text,
+        prompt, author_id, author_name, target_agent_id, thread_id,
+        status, answer_text, answer_edit_id, answered_by,
+        created_at, claimed_at, answered_at
+      )
+      SELECT
+        id, project_id, file_id, selection_start, selection_end, selection_text,
+        prompt, author_id, author_name, target_agent_id, thread_id,
+        status, answer_text, answer_edit_id, answered_by,
+        created_at, claimed_at, answered_at
+      FROM intents;
+      DROP TABLE intents;
+      ALTER TABLE intents_v9 RENAME TO intents;
+      CREATE INDEX IF NOT EXISTS idx_intents_scope
+        ON intents(project_id, file_id, status);
+      CREATE INDEX IF NOT EXISTS idx_intents_thread
+        ON intents(thread_id);
+      CREATE INDEX IF NOT EXISTS idx_intents_target
+        ON intents(target_agent_id, status);
+    `,
+  },
 ];
 
 export async function getDb(): Promise<DatabaseSync> {

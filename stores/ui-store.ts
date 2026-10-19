@@ -38,6 +38,14 @@ export interface FocusRangeCommand {
 
 interface UiStoreState {
   currentDocumentId: string | null;
+  /**
+   * The project the workspace is looking at while no document is open.
+   *
+   * The ask dock needs a project to ask into before anything has been opened —
+   * which is exactly the case it used to be disabled for. The list pane owns that
+   * selection as local state, so it publishes it here.
+   */
+  currentProjectId: string | null;
   /** Open doc tabs — the user can flip between them without leaving editor. */
   openDocuments: string[];
   activeMainBlock: WorkspaceMainBlock;
@@ -95,6 +103,7 @@ interface UiStoreState {
   lastRestore: { documentId: string; fileId: string; versionId: string; token: number } | null;
 
   setCurrentDocumentId: (id: string | null) => void;
+  setCurrentProjectId: (id: string | null) => void;
   closeDocument: (id: string) => void;
   setActiveMainBlock: (block: WorkspaceMainBlock) => void;
   setPanelVisibility: (panel: PanelName, visible: boolean) => void;
@@ -119,6 +128,7 @@ const signal = (target: AttentionTarget, reason: AttentionSignal["reason"] = "ui
 
 export const useUiStore = create<UiStoreState>((set, get) => ({
   currentDocumentId: null,
+  currentProjectId: null,
   openDocuments: [],
   activeMainBlock: "editor",
   panelVisibility: { sidebar: true, ai: false, inspector: false },
@@ -133,6 +143,8 @@ export const useUiStore = create<UiStoreState>((set, get) => ({
   layout: { sidebarSide: "right", splitRatio: 0.5 },
   editorViewCommand: null,
   lastRestore: null,
+
+  setCurrentProjectId: (id) => set({ currentProjectId: id }),
 
   setCurrentDocumentId: (id) =>
     set((state) => {

@@ -103,7 +103,8 @@ export type UiPatch =
        *  `intent` is the full row; for `closed` only the id may be present. */
       type: "intent_created" | "intent_claimed" | "intent_answered" | "intent_closed";
       projectId: string;
-      fileId: string;
+      /** null when the ask is about the project, not about a document. */
+      fileId: string | null;
       intent?: unknown;
       intentId?: string;
     }

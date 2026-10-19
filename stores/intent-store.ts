@@ -71,8 +71,16 @@ export const useIntentStore = create<IntentStoreState>((set, get) => ({
     >;
     const { scope } = get();
     if (!scope.projectId || p.projectId !== scope.projectId) return;
-    // null fileId scope = project-wide view (no doc open); otherwise filter.
-    if (scope.fileId && p.fileId !== scope.fileId) return;
+    // Two directions, and they must agree with askDockState:
+    //
+    //   scope.fileId null   — the project view; every ask in it counts.
+    //   patch.fileId null   — the ask was about the project, not a document, so it
+    //                         stays live whichever document is open.
+    //
+    // A plain `!==` dropped the second case, so an answer to a project-scope
+    // question never entered the list while a document was open: the row existed
+    // and the dock stayed on "等待中" forever.
+    if (scope.fileId && p.fileId && p.fileId !== scope.fileId) return;
 
     // DELETE broadcasts only { intentId } — drop the row entirely.
     if (p.type === "intent_closed" && !p.intent && p.intentId) {

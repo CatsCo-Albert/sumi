@@ -12,7 +12,8 @@
 export interface AskIntentLike {
   id: string;
   projectId: string;
-  fileId: string;
+  /** null for an ask that was not about a particular document. */
+  fileId: string | null;
   status: string;
   prompt?: string | null;
   answerText?: string | null;
@@ -21,7 +22,9 @@ export interface AskIntentLike {
 }
 
 export interface AskScope {
+  /** null means there is no project to ask into — nothing can be shown. */
   projectId: string | null;
+  /** null treats the scope as the whole project. */
   fileId: string | null;
 }
 
@@ -47,9 +50,16 @@ export function askDockState(
 
   const relevant = intents.filter((i) => {
     if (!i || i.projectId !== scope.projectId) return false;
-    // A null fileId means the project-wide surface; otherwise the ask must belong
-    // to the document currently open.
-    if (scope.fileId && i.fileId !== scope.fileId) return false;
+    // Two directions, and they are not the same question:
+    //
+    //   scope.fileId null      — viewing the project; every ask in it counts.
+    //   intent.fileId null     — the ask was about the project, not a document, so
+    //                            it stays relevant whichever document you open next.
+    //                            Hiding it on open would make an answer disappear
+    //                            the moment you looked for somewhere to apply it.
+    //
+    // A doc-scoped ask only counts for that document.
+    if (scope.fileId && i.fileId && i.fileId !== scope.fileId) return false;
     // Closed is settled and the author moved on — nothing to report.
     return i.status !== "closed";
   });
