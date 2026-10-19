@@ -78,6 +78,14 @@ function openDocument(id: string): void {
   window.location.assign(apiPath(`/?doc=${encodeURIComponent(id)}`));
 }
 
+/**
+ * Remembered project id.
+ *
+ * The list page is where you land after closing a document, and re-selecting the
+ * same project every time is work the app can do itself.
+ */
+const LAST_PROJECT_KEY = "sumi:last-project";
+
 export default function DocumentListPane() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -129,6 +137,12 @@ export default function DocumentListPane() {
   // from here was impossible rather than merely awkward.
   useEffect(() => {
     setCurrentProjectId(selected?.id ?? null);
+    if (!selected) return;
+    try {
+      localStorage.setItem(LAST_PROJECT_KEY, selected.id);
+    } catch {
+      /* private mode */
+    }
   }, [selected, setCurrentProjectId]);
 
   useEffect(() => {
@@ -149,7 +163,31 @@ export default function DocumentListPane() {
   useEffect(() => {
     fetch(apiPath("/api/projects"), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : { projects: [] }))
-      .then((d) => setProjects(d.projects || []))
+      .then((d) => {
+        const list: Project[] = d.projects || [];
+        setProjects(list);
+        // Select something without being asked. Everything on this page — the
+        // document list, and the ask dock in the shell — needs a project, and the
+        // previous behaviour was to leave the page inert until the user clicked
+        // one: the ask box rendered, opened, and refused every keystroke.
+        //
+        // The last project is remembered because coming back should land where you
+        // left off; falling back to the first keeps a fresh session usable.
+        setSelected((current) => {
+          if (current) return current;
+          let remembered: string | null = null;
+          try {
+            remembered = localStorage.getItem(LAST_PROJECT_KEY);
+          } catch {
+            /* private mode */
+          }
+          return (
+            list.find((p) => p.id === remembered) ??
+            list.find((p) => !p.archived) ??
+            null
+          );
+        });
+      })
       .catch(() => setProjects([]));
     fetch(apiPath("/api/auth/me"), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : null))
