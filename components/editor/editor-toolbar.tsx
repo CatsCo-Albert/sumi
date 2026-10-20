@@ -46,14 +46,8 @@ export interface EditorToolbarProps {
   tapAvailable?: boolean;
   tapEnabled?: boolean;
   onTapToggle?: () => void;
-  /**
-   * Cmd+Shift+I — open the ask-agent dialog when a selection exists.
-   *
-   * Not a button: the ask dock already floats over the editor, and two controls for
-   * one action two centimetres apart is a duplicate, not a convenience. The shortcut
-   * stays because it carries the selection, which the dock cannot know about.
-   */
-  onAskAgent?: () => void;
+  // No onAskAgent: the button is gone and the shortcut is bound once, at window
+  // level, so it also works where this toolbar does not exist.
   className?: string;
 }
 
@@ -423,7 +417,6 @@ export function EditorToolbar({
   tapAvailable = false,
   tapEnabled = false,
   onTapToggle,
-  onAskAgent,
   className,
 }: EditorToolbarProps) {
   const view = editorView;

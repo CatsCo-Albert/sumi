@@ -26,7 +26,11 @@ import { cn } from "@/lib/utils";
 import { getAuthHeaders } from "@/lib/use-session";
 import { useIntentStore } from "@/stores/intent-store";
 import { useUiStore } from "@/stores/ui-store";
-import { askDockState } from "@/lib/ask-dock";
+import {
+  askDockState,
+  readAskDraft,
+  writeAskDraft,
+} from "@/lib/ask-dock";
 import { parseSpec } from "@/lib/spec";
 import { SumiSpecRenderer } from "@/components/a2ui/json-render";
 import type { IntentRow } from "@/src/intents";
@@ -49,7 +53,9 @@ export function AgentAskDock({
   projectId: string | null;
   fileId: string | null;
 }) {
-  const [prompt, setPrompt] = useState("");
+  // Seeded from sessionStorage: opening a document is a full page load, and a
+  // question typed on the project list used to vanish on the way to the file.
+  const [prompt, setPrompt] = useState(() => readAskDraft());
   const [targetAgent, setTargetAgent] = useState("");
   const [busy, setBusy] = useState(false);
   const [agents, setAgents] = useState<AgentOption[]>([]);
@@ -72,6 +78,13 @@ export function AgentAskDock({
   useEffect(() => {
     setScope({ projectId, fileId });
   }, [projectId, fileId, setScope]);
+
+  // Mirror the draft out on every change so a navigation cannot lose it. Chosen
+  // over writing at unmount time: a full navigation does not reliably run cleanup,
+  // and this way the copy is never older than the keystroke before it.
+  useEffect(() => {
+    writeAskDraft(prompt);
+  }, [prompt]);
 
   // Focus the box when it opens, however it was opened (button, shortcut, patch).
   useEffect(() => {
@@ -188,6 +201,7 @@ export function AgentAskDock({
       const { intent } = (await res.json()) as { intent?: IntentRow };
       if (intent) upsertIntent(intent);
       setPrompt("");
+      writeAskDraft("");
     } catch (err) {
       toast({
         title: "发送失败",

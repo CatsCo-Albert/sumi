@@ -6,8 +6,15 @@
  * lib/ask-dock.ts, so it can be pinned here rather than inferred from the UI.
  */
 
-import { describe, it, expect } from "vitest";
-import { askDockState, type AskIntentLike } from "../lib/ask-dock";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import {
+  askDockState,
+  readAskDraft,
+  writeAskDraft,
+  readAskOpen,
+  writeAskOpen,
+  type AskIntentLike,
+} from "../lib/ask-dock";
 
 const P = "prj_a";
 const SCOPE = { projectId: P, fileId: "notes.md" };
@@ -188,5 +195,77 @@ describe("askDockState", () => {
   it("trims the prompt it reports", () => {
     const state = askDockState([intent({ prompt: "  带空格的问题  " })], SCOPE);
     expect(state).toMatchObject({ prompt: "带空格的问题" });
+  });
+});
+
+
+/**
+ * The draft and the open flag have to outlive a page load.
+ *
+ * Opening a document is a full navigation here — the gateway rewrites slashless
+ * URLs and drops the query string, which is why the list pane assigns `location`
+ * on purpose. React state does not survive that, so a question typed on the
+ * project list disappeared exactly when you opened the file it was about.
+ *
+ * These exercise the helpers rather than the component, because the component is
+ * where the state is *used* and the helpers are where the survival rule lives.
+ */
+describe("ask draft across a navigation", () => {
+  beforeEach(() => {
+    const map = new Map<string, string>();
+    vi.stubGlobal("window", {
+      sessionStorage: {
+        getItem: (k: string) => map.get(k) ?? null,
+        setItem: (k: string, v: string) => void map.set(k, v),
+        removeItem: (k: string) => void map.delete(k),
+      },
+    });
+  });
+
+  it("reads back what was written", () => {
+    writeAskDraft("改成正式语气");
+    expect(readAskDraft()).toBe("改成正式语气");
+  });
+
+  it("treats nothing stored as an empty draft, not as an error", () => {
+    expect(readAskDraft()).toBe("");
+  });
+
+  it("clears rather than storing an empty string", () => {
+    // A stored "" would come back as a draft that looks saved but is not; removing
+    // the key keeps "no draft" and "empty draft" the same state.
+    writeAskDraft("x");
+    writeAskDraft("");
+    expect(readAskDraft()).toBe("");
+  });
+
+  it("defaults the open flag to closed", () => {
+    expect(readAskOpen()).toBe(false);
+  });
+
+  it("remembers the box being open, and shutting it", () => {
+    writeAskOpen(true);
+    expect(readAskOpen()).toBe(true);
+    writeAskOpen(false);
+    expect(readAskOpen()).toBe(false);
+  });
+
+  it("survives storage being unavailable", () => {
+    // SSR, tests without storage, and private mode all land here. A throw would
+    // take the dock down with it, which is a much worse outcome than a lost draft.
+    vi.stubGlobal("window", {
+      get sessionStorage(): Storage {
+        throw new Error("blocked");
+      },
+    });
+    expect(() => writeAskDraft("x")).not.toThrow();
+    expect(readAskDraft()).toBe("");
+    expect(readAskOpen()).toBe(false);
+  });
+
+  it("survives there being no window at all", () => {
+    vi.stubGlobal("window", undefined);
+    writeAskOpen(true);
+    expect(readAskOpen()).toBe(false);
   });
 });

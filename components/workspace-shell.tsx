@@ -10,7 +10,7 @@
  * blur only on the floating surface.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiPath } from "@/lib/api-path";
 import { inviteUrl } from "@/lib/invite-link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,6 +18,7 @@ import { EditorView } from "@codemirror/view";
 import { useSession, getAuthHeaders } from "@/lib/use-session";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui-store";
+import { readAskOpen, writeAskOpen } from "@/lib/ask-dock";
 import { broadcastPageState } from "@/lib/provider-registry";
 import { useUiEvents } from "@/lib/use-ui-events";
 import CollaborativeEditor from "@/components/editor/collaborative-editor";
@@ -53,6 +54,24 @@ export default function WorkspaceShell() {
   const theme = useUiStore((s) => s.theme);
   const setCurrentDocumentId = useUiStore((s) => s.setCurrentDocumentId);
   const setPanelVisibility = useUiStore((s) => s.setPanelVisibility);
+
+  // The ask surfaces live here, not inside the editor, so the shortcut works on
+  // every page and the dialog is not unmounted by opening a document.
+  //
+  // `askEditorView` is the live CodeMirror view, published up by the editor pane.
+  // Reading the selection from it is what lets ⌘⇧I keep the line context when the
+  // keystroke arrives while the editor has focus — the same thing the editor's own
+  // keymap used to do, except this one also fires when it does not.
+  const [askOpen, setAskOpen] = useState(false);
+  const [askSelection, setAskSelection] = useState<{
+    text: string;
+    startLine: number;
+    endLine: number;
+  } | null>(null);
+  const [askEditorView, setAskEditorView] = useState<EditorView | null>(null);
+  const [askAgents, setAskAgents] = useState<
+    Array<{ subjectId: string; name: string | null }>
+  >([]);
 
   // Live push: subscribe to UI patches from the SSE endpoint.
   useUiEvents({ projectId: null });
@@ -104,6 +123,83 @@ export default function WorkspaceShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [currentDocumentId, setCurrentDocumentId]);
 
+  /**
+   * Ask an agent.
+   *
+   * One entry point for every page. With a selection it opens the anchored dialog,
+   * which keeps the line range; with none it opens the floating box.
+   *
+   * The selection is read from the live CodeMirror view rather than passed by a
+   * caller: the keystroke can arrive from a window-level listener, where nothing
+   * about the editor is in scope. `askEditorView` is that view, published up by the
+   * editor pane when it mounts.
+   */
+  const handleAskAgent = useCallback(
+    (sel: { text: string; startLine: number; endLine: number } | null) => {
+      const view = askEditorView;
+      let resolved = sel;
+      if (!resolved && view) {
+        const range = view.state.selection.main;
+        if (!range.empty) {
+          resolved = {
+            text: view.state.doc.sliceString(range.from, range.to),
+            startLine: view.state.doc.lineAt(range.from).number,
+            endLine: view.state.doc.lineAt(range.to).number,
+          };
+        }
+      }
+
+      if (resolved) {
+        setAskSelection(resolved);
+        setAskOpen(true);
+      } else {
+        // Nothing selected: the floating box is the place to type, not the dialog.
+        setPanelVisibility("ai", true);
+      }
+    },
+    [askEditorView, setPanelVisibility]
+  );
+
+  // ⌘⇧I from anywhere. Registered on the window, not on the editor, so it works on
+  // the project list too — and registered here rather than in CodeMirror's keymap so
+  // there is one binding rather than two that can disagree.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        handleAskAgent(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleAskAgent]);
+
+  // Who can be asked. Best-effort: the picker falls back to "所有 agent", and a
+  // failure here must not keep the dialog from opening.
+  useEffect(() => {
+    if (!actor) return;
+    let alive = true;
+    fetch(apiPath("/api/friends"), { headers: getAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : { agents: [] }))
+      .then((d) => {
+        if (!alive) return;
+        setAskAgents(
+          ((d.agents ?? []) as Array<{
+            subjectId: string;
+            displayName?: string;
+            username?: string;
+          }>).map((a) => ({
+            subjectId: a.subjectId,
+            name: a.displayName || a.username || a.subjectId,
+          }))
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [actor]);
+
   // Track foreground/background — agents want to know if the user
   // is actually looking at the screen right now.
   const [foreground, setForeground] = useState(
@@ -133,6 +229,22 @@ export default function WorkspaceShell() {
   }, [currentDocumentId, activeMainBlock, panelVisibility, actor, foreground]);
 
   const aiOpen = panelVisibility.ai;
+
+  // Whether the box is open and what was typed are ideas that outlive a page load:
+  // opening a document is a full navigation here (the gateway rewrites slashless
+  // URLs and drops the query), so without this a half-typed question disappeared on
+  // the way to the file it was about, and the box closed itself.
+  //
+  // Restore once on mount, then mirror every change back. Writing on change rather
+  // than on unmount because a full navigation does not reliably run cleanup.
+  useEffect(() => {
+    if (readAskOpen()) setPanelVisibility("ai", true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    writeAskOpen(aiOpen);
+  }, [aiOpen]);
   const attentionTarget = attentionSignal?.target;
 
   // Which project the dock asks into. With a document open that is the document's
@@ -162,6 +274,7 @@ export default function WorkspaceShell() {
             documentId={currentDocumentId}
             attention={attentionTarget === "editor"}
             actor={actor}
+            onEditorViewChange={setAskEditorView}
           />
         ) : (
           <DocumentListPane />
@@ -176,6 +289,23 @@ export default function WorkspaceShell() {
           onOpenChange={(next) => setPanelVisibility("ai", next)}
           projectId={aiProjectId}
           fileId={aiFileId}
+        />
+      )}
+
+      {/* Selection-anchored ask. Mounted here rather than inside the editor so the
+          shortcut works on every page and the dialog is not torn down by opening a
+          document; when there is no document it asks at project scope. */}
+      {actor && (
+        <AskAgentDialog
+          open={askOpen}
+          projectId={aiProjectId}
+          fileId={aiFileId}
+          selection={askSelection}
+          agents={askAgents}
+          onClose={() => setAskOpen(false)}
+          onCreated={(intent) => {
+            if (intent) useIntentStore.getState().upsertIntent(intent);
+          }}
         />
       )}
 
@@ -197,10 +327,19 @@ function EditorPane({
   documentId,
   attention,
   actor,
+  onEditorViewChange,
 }: {
   documentId: string;
   attention: boolean;
   actor: { id: string; name: string; kind: "user" | "agent" };
+  /**
+   * Publishes the live CodeMirror view to the shell.
+   *
+   * The ask shortcut lives at shell level so it works outside the editor too, and
+   * shell level has no other way to reach the selection. A callback rather than a
+   * shared ref because the view is replaced on every document switch.
+   */
+  onEditorViewChange?: (view: EditorView | null) => void;
 }) {
   const setCurrentDocumentId = useUiStore((s) => s.setCurrentDocumentId);
   const openDocuments = useUiStore((s) => s.openDocuments);
@@ -241,7 +380,6 @@ function EditorPane({
   // reach is state the assistant appears unable to touch.
   const sidebarTab = useUiStore((s) => s.sidebarTab);
   const setSidebarTab = useUiStore((s) => s.setSidebarTab);
-  const [askOpen, setAskOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings] = useEditorSettings();
 
@@ -258,14 +396,6 @@ function EditorPane({
     }
   }, [settings.fontSize, settings.theme]);
 
-  const [askSelection, setAskSelection] = useState<{
-    text: string;
-    startLine: number;
-    endLine: number;
-  } | null>(null);
-  const [agents, setAgents] = useState<
-    Array<{ subjectId: string; name: string | null }>
-  >([]);
   const editorViewRef = useRef<EditorView | null>(null);
   // State mirror of the ref — the toolbar needs a reactive value to
   // enable/disable buttons once the CM view mounts.
@@ -277,6 +407,7 @@ function EditorPane({
   const handleEditorReady = (v: EditorView | null) => {
     editorViewRef.current = v;
     setEditorView(v);
+    onEditorViewChange?.(v);
   };
 
   const handleContentChange = (content: string) => {
@@ -449,19 +580,6 @@ function EditorPane({
       clearInterval(iv);
     };
   }, [projectId]);
-
-  const handleAskAgent = (
-    sel: { text: string; startLine: number; endLine: number } | null
-  ) => {
-    setAskSelection(sel);
-    if (sel) {
-      // Selection anchored — quick-input dialog keeps the line context.
-      setAskOpen(true);
-    } else {
-      // No selection — the AI panel is the conversation surface.
-      applyUiPatch({ type: "set_panel_visibility", panel: "ai", visible: true });
-    }
-  };
 
   // Cmd+K — grab current selection, push it into the AI dock as a prompt.
   useEffect(() => {
@@ -744,7 +862,6 @@ function EditorPane({
           tapAvailable={TAP_AVAILABLE}
           tapEnabled={tapEnabled}
           onTapToggle={() => setTapEnabled((v) => !v)}
-          onAskAgent={() => handleAskAgent(null)}
         />
       )}
       <div className="relative flex-1 overflow-hidden">
@@ -777,7 +894,6 @@ function EditorPane({
                 onCollaboratorsChange={setCollaborators}
                 onCursorLineChange={setCursorLine}
                 onEditorReady={handleEditorReady}
-                onAskAgent={handleAskAgent}
                 onConnectionStatusChange={setConnStatus}
               />
             </div>
@@ -812,7 +928,6 @@ function EditorPane({
                 onCollaboratorsChange={setCollaborators}
                 onCursorLineChange={setCursorLine}
                 onEditorReady={handleEditorReady}
-                onAskAgent={handleAskAgent}
                 onConnectionStatusChange={setConnStatus}
               />
             </div>
@@ -854,18 +969,6 @@ function EditorPane({
           <span className="text-muted-foreground/50">{fileId}</span>
         </div>
       </footer>
-      <AskAgentDialog
-        open={askOpen}
-        projectId={projectId}
-        fileId={fileId}
-        selection={askSelection}
-        agents={agents}
-        onClose={() => setAskOpen(false)}
-        onCreated={(intent) => {
-          if (intent) useIntentStore.getState().upsertIntent(intent);
-        }}
-      />
-
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );

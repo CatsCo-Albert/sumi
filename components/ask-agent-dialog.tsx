@@ -16,8 +16,9 @@ import type { IntentRow } from "@/src/intents";
 
 interface AskAgentDialogProps {
   open: boolean;
-  projectId: string;
-  fileId: string;
+  projectId: string | null;
+  /** The document the question is about; null asks at project scope. */
+  fileId: string | null;
   /** Selected text + line range, if any. */
   selection?: {
     text: string;
@@ -56,14 +57,17 @@ export function AskAgentDialog({
   if (!open) return null;
 
   const submit = async () => {
-    if (!prompt.trim() || busy) return;
+    if (!prompt.trim() || busy || !projectId) return;
     setBusy(true);
     try {
+      // fileId is sent only when there is one. The route reads an absent fileId as
+      // "this question is about the project", which is a different scope rather
+      // than a missing field — so an empty document id must not be sent as "".
       const body: any = {
         projectId,
-        fileId,
         prompt: prompt.trim(),
       };
+      if (fileId) body.fileId = fileId;
       if (targetAgent) body.targetAgentId = targetAgent;
       if (selection) {
         body.selectionStart = selection.startLine;
@@ -94,12 +98,18 @@ export function AskAgentDialog({
   };
 
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 w-[560px]">
+    <div
+      // fixed, not absolute: the dialog is mounted at the shell root, where an
+      // absolutely positioned child would anchor to whichever ancestor happens to
+      // be positioned rather than to the viewport.
+      className="fixed bottom-6 left-1/2 z-50 w-[min(92vw,560px)] -translate-x-1/2"
+    >
       <div className="material-glass shadow-xl rounded-2xl p-4 border border-border">
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="text-[12px] font-medium text-muted-foreground">
-            询问 agent · <span className="text-foreground">{fileId}</span>
+            询问 agent ·{" "}
+            <span className="text-foreground">{fileId ?? "整个项目"}</span>
             {selection && (
               <span className="ml-2 text-[10px] text-muted-foreground/70">
                 L{selection.startLine}–{selection.endLine}

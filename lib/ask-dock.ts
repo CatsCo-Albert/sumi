@@ -86,3 +86,75 @@ export function askDockState(
 
   return { kind: "waiting", prompt };
 }
+
+// ---------------------------------------------------------------------------
+// Surviving the navigation
+// ---------------------------------------------------------------------------
+
+/**
+ * The ask draft and whether the box is open, kept across a page load.
+ *
+ * Opening a document is a full navigation, not a client-side route change — the
+ * gateway rewrites slashless URLs and drops the query string, so the list pane
+ * assigns `location` on purpose (see openDocument). A reload discards React state,
+ * which meant a question half-typed on the project list vanished the moment you
+ * opened the file you were asking about.
+ *
+ * sessionStorage rather than localStorage: a draft belongs to this session's
+ * intent, and a prompt left over from last week reappearing in the box would be
+ * worse than an empty one.
+ *
+ * Both helpers are total — no sessionStorage (SSR, tests, private mode) is a
+ * supported state, not an error.
+ */
+
+const DRAFT_KEY = "sumi:ask-draft";
+const OPEN_KEY = "sumi:ask-open";
+
+function store(): Storage | null {
+  try {
+    if (typeof window === "undefined") return null;
+    return window.sessionStorage;
+  } catch {
+    // Blocked storage throws on access rather than returning null.
+    return null;
+  }
+}
+
+export function readAskDraft(): string {
+  try {
+    return store()?.getItem(DRAFT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function writeAskDraft(value: string): void {
+  try {
+    const s = store();
+    if (!s) return;
+    if (value) s.setItem(DRAFT_KEY, value);
+    else s.removeItem(DRAFT_KEY);
+  } catch {
+    /* nothing to do — the draft simply does not survive this navigation */
+  }
+}
+
+export function readAskOpen(): boolean {
+  try {
+    return store()?.getItem(OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeAskOpen(open: boolean): void {
+  try {
+    const s = store();
+    if (!s) return;
+    if (open) s.setItem(OPEN_KEY, "1");
+    else s.removeItem(OPEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
