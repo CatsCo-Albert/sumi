@@ -45,7 +45,6 @@ import { lintKeymap } from "@codemirror/lint";
 import * as Y from "yjs";
 import { yCollab } from "y-codemirror.next";
 import { WebsocketProvider } from "y-websocket";
-import { IndexeddbPersistence } from "y-indexeddb";
 
 import {
   getUserColorById,
@@ -215,15 +214,22 @@ export default function CollaborativeEditor({
     providerRef.current = provider;
     const unregister = registerProvider(roomName, provider);
 
-    // Offline persistence — IndexedDB mirror of the Yjs doc. Even if the WS
-    // is unreachable, edits land in local storage and sync up on reconnect.
-    let idbPersistence: IndexeddbPersistence | null = null;
-    if (typeof window !== "undefined" && window.indexedDB) {
-      // Versioned key. The local mirror is merged into the doc on open, so a copy
-      // written while the doc was inflated would re-inflate it on the next visit —
-      // bumping the key abandons those copies instead of resurrecting them.
-      idbPersistence = new IndexeddbPersistence(`sumi-doc-v2-${roomName}`, ydoc);
-    }
+    // No IndexedDB mirror. It was here for offline editing, and it is the reason
+    // documents kept doubling.
+    //
+    // The mechanism, in full: on mount the mirror loads the browser's own copy into
+    // this Y.Doc. The server, meanwhile, has just built a fresh room and seeded it
+    // from the disk blob — a *different* insertion, from a different clientID. Yjs
+    // treats concurrent inserts at the same position as both-wanted and concatenates
+    // them. So opening a document produced two copies of it, autosave wrote the
+    // doubled text to disk, and the next visit had a doubled blob to seed from:
+    // 5 chars became 10, 517 became 1034 then 2068, and one document reached 90 MB.
+    //
+    // The duplicate source has to be one of the two, and the server's blob is the
+    // one that survives a browser change. Dropping the mirror costs offline editing,
+    // which this deployment does not do: the editor is served through the gateway
+    // and has a socket whenever the page has loaded.
+    const idbPersistence = null as { destroy: () => void } | null;
 
     const userColor = userId ? getUserColorById(userId) : generateUserColor();
     const displayName = userName || generateUserName();
