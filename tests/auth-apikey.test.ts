@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 process.env.CATSCO_BASE_URL = "https://catsco.example";
 delete process.env.CATSCO_SERVICE_TOKEN;
 
-const { introspectToken } = await import("../src/auth/catsco");
+const { introspectToken, resetAuthCacheForTests } = await import("../src/auth/catsco");
 
 interface Call {
   url: string;
@@ -66,10 +66,16 @@ const BOT_ME = {
 
 beforeEach(() => {
   delete process.env.CATSCO_SERVICE_TOKEN;
+  // Resolution results are cached briefly (see tests/auth-cache.test.ts). These
+  // cases each stub their own upstream answer, so a cache entry from the previous
+  // case would answer for them — and the ones asserting a refusal would instead see
+  // the earlier success.
+  resetAuthCacheForTests();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetAuthCacheForTests();
 });
 
 describe("introspectToken — /api/me fallback", () => {

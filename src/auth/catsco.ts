@@ -45,6 +45,67 @@ const JWT_SECRET = process.env.OC_JWT_SECRET || "";
 
 const INTROSPECT_TIMEOUT_MS = 5_000;
 
+/**
+ * How long a successful ApiKey resolution is reused.
+ *
+ * Every request carrying a `cc_` key resolves by asking CatsCo who it is — a network
+ * round-trip with a 5 s timeout. The outcome is treated as all-or-nothing: a timeout,
+ * a reset, or one 502 from upstream returns null, and null is reported to the caller
+ * as "not authenticated", i.e. 403.
+ *
+ * That turned upstream flakiness into a client-visible auth failure. Observed with
+ * the resident responder, which polls twice every 5 s: roughly 1 in 12 polls came
+ * back 403 with the same credentials that had just succeeded. Nothing was wrong with
+ * the key, and nothing in the response said "try again".
+ *
+ * So a success is remembered briefly. A short window cannot hide a revoked key for
+ * long, and it turns a single upstream blip into a retry rather than a rejection.
+ * Failures are deliberately *not* cached: caching them would make a momentary outage
+ * look like a permanent authorisation problem, and would delay recovery once the
+ * upstream came back.
+ */
+const AUTH_CACHE_MS = Number(process.env.SUMI_AUTH_CACHE_MS || 30_000);
+
+/** Big enough for a handful of agents polling; small enough to stay trivial. */
+const AUTH_CACHE_MAX = 200;
+
+const authCache = new Map<string, { result: IntrospectResult; expiresAt: number }>();
+
+/** Identity of a token for cache purposes — the raw key is not kept as a map key. */
+function tokenKey(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function cacheGet(token: string): IntrospectResult | null {
+  if (AUTH_CACHE_MS <= 0) return null;
+  const hit = authCache.get(tokenKey(token));
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    authCache.delete(tokenKey(token));
+    return null;
+  }
+  return hit.result;
+}
+
+function cacheSet(token: string, result: IntrospectResult): void {
+  if (AUTH_CACHE_MS <= 0) return;
+  const key = tokenKey(token);
+  // Delete-then-set so the Map's insertion order stays "least recently stored",
+  // which is the eviction order below.
+  authCache.delete(key);
+  authCache.set(key, { result, expiresAt: Date.now() + AUTH_CACHE_MS });
+  while (authCache.size > AUTH_CACHE_MAX) {
+    const oldest = authCache.keys().next();
+    if (oldest.done) break;
+    authCache.delete(oldest.value);
+  }
+}
+
+/** Test seam: the cache must not leak between cases. */
+export function resetAuthCacheForTests(): void {
+  authCache.clear();
+}
+
 // ---------------------------------------------------------------------------
 // JWT verification (local)
 // ---------------------------------------------------------------------------
@@ -138,6 +199,18 @@ export interface IntrospectResult {
  * number (0=human, 1=bot), so the string form is mapped before returning.
  */
 export async function introspectToken(
+  token: string
+): Promise<IntrospectResult | null> {
+  const cached = cacheGet(token);
+  if (cached) return cached;
+
+  const fresh = await resolveTokenUncached(token);
+  // Only a success is worth remembering — see the note on AUTH_CACHE_MS.
+  if (fresh?.active && fresh.user) cacheSet(token, fresh);
+  return fresh;
+}
+
+async function resolveTokenUncached(
   token: string
 ): Promise<IntrospectResult | null> {
   if (serviceToken()) {
