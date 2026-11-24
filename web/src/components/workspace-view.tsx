@@ -337,9 +337,7 @@ export function WorkspaceView() {
                   aria-label="筛选文档"
                   placeholder="筛选文件…"
                   value={filter()}
-                  onInput={(event: Event) =>
-                    setFilter((event.target as HTMLInputElement).value)
-                  }
+                  onValueChange={(next: string) => setFilter(next)}
                 />
               </div>
               <ScrollArea>
@@ -626,9 +624,7 @@ export function WorkspaceView() {
                 aria-label="问 Agent"
                 placeholder="问 Agent：这段怎么改？"
                 value={question()}
-                onInput={(event: Event) =>
-                  setQuestion((event.currentTarget as HTMLInputElement).value)
-                }
+                onValueChange={(next: string) => setQuestion(next)}
                 onKeyDown={(event: KeyboardEvent) => {
                   if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) void ask();
                 }}
