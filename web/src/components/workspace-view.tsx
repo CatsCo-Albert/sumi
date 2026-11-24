@@ -5,7 +5,6 @@ import { Input } from "@ui-sdk/solid/input";
 import { Resizable, ResizableHandle, ResizablePanel } from "@ui-sdk/solid/resizable";
 import { ScrollArea, ScrollAreaViewport } from "@ui-sdk/solid/scroll-area";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@ui-sdk/solid/tabs";
-import { Toolbar, ToolbarButton, ToolbarSeparator } from "@ui-sdk/solid/toolbar";
 import { Editor } from "./editor";
 import { NameDialog } from "./shell";
 import { workspace } from "../lib/workspace";
@@ -56,7 +55,7 @@ function TreeRows(props: {
               when={node.kind === "file"}
               fallback={
                 <span class="tree-folder">
-                  <span class="tree-caret">▾</span>
+                  <span class="tree-caret" aria-hidden="true" />
                   {node.name}
                 </span>
               }
@@ -107,6 +106,30 @@ export function WorkspaceView() {
     editor.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
     editor.focus();
   };
+
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
+  let paletteInput: HTMLInputElement | undefined;
+
+  /* ⌘K anywhere is the expected way into a command bar; Esc gets out. */
+  const onKeyDown = (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      setPaletteOpen((open) => !open);
+    } else if (event.key === "Escape" && paletteOpen()) {
+      setPaletteOpen(false);
+    }
+  };
+  window.addEventListener("keydown", onKeyDown);
+  onCleanup(() => window.removeEventListener("keydown", onKeyDown));
+
+  /* Solid 2 wants an effect in two parts; a single-argument createEffect throws
+     and takes the whole component down with it. */
+  createEffect(
+    () => paletteOpen(),
+    (open) => {
+      if (open) queueMicrotask(() => paletteInput?.focus());
+    }
+  );
 
   const actor = () => workspace.actor();
   const project = () => workspace.currentProject();
@@ -233,42 +256,47 @@ export function WorkspaceView() {
       <header class="topbar">
         <span class="brand">Sumi</span>
 
-        <select
-          class="project-select"
-          aria-label="选择项目"
-          value={workspace.projectId() ?? ""}
-          onChange={(event) => void workspace.selectProject(event.currentTarget.value)}
-        >
-          <For each={workspace.projects()}>
-            {(item) => <option value={item.id}>{item.name}</option>}
-          </For>
-        </select>
-
-        <Toolbar aria-label="工作区操作">
-          <ToolbarButton onClick={() => setDialog("project")}>新建项目</ToolbarButton>
-          <ToolbarSeparator />
-          <ToolbarButton
-            disabled={!workspace.projectId() || !workspace.canEdit()}
-            onClick={() => setDialog("document")}
+        <nav class="crumbs" aria-label="当前位置">
+          <select
+            class="crumb-select"
+            aria-label="选择项目"
+            value={workspace.projectId() ?? ""}
+            onChange={(event) => void workspace.selectProject(event.currentTarget.value)}
           >
-            新建文档
-          </ToolbarButton>
-          <ToolbarSeparator />
-          <ToolbarButton disabled={!fileId()} onClick={() => void save()}>
-            保存
-          </ToolbarButton>
-        </Toolbar>
+            <For each={workspace.projects()}>
+              {(item) => <option value={item.id}>{item.name}</option>}
+            </For>
+          </select>
+          <Show when={fileId()}>
+            <span class="crumb-sep" aria-hidden="true">/</span>
+            <span class="crumb-current" translate="no">
+              {document()?.title || fileId()}
+            </span>
+          </Show>
+        </nav>
 
         <span class="spacer" />
+
+        <button
+          class="cmd-trigger"
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          aria-keyshortcuts="Meta+K Control+K"
+        >
+          问 Agent
+          <kbd>⌘K</kbd>
+        </button>
+
         <span class="status" data-live={live()}>
-          {live() ? "实时已连接" : "实时断开"}
+          {live() ? "已连接" : "已断开"}
         </span>
-        <Show when={fileId()}>
+
+        <Show when={presence() > 1}>
           <span class="presence">{presence()} 人在线</span>
         </Show>
-        <span class="who">
+
+        <span class="who" title={actor()?.kind === "agent" ? "agent" : "user"}>
           {actor()?.name}
-          <span class="role">{actor()?.kind === "agent" ? "agent" : "user"}</span>
         </span>
       </header>
 
@@ -308,6 +336,16 @@ export function WorkspaceView() {
                   </div>
                 </ScrollAreaViewport>
               </ScrollArea>
+              <div class="pane-foot">
+                <button
+                  class="pane-add"
+                  type="button"
+                  disabled={!workspace.projectId() || !workspace.canEdit()}
+                  onClick={() => setDialog("document")}
+                >
+                  <span aria-hidden="true">+</span> 新建文档
+                </button>
+              </div>
             </nav>
           </ResizablePanel>
 
@@ -320,20 +358,30 @@ export function WorkspaceView() {
                 fallback={<div class="empty-center">选择或新建一个文档开始</div>}
               >
                 <div class="doc-head">
-                  <h1 class="doc-title" translate="no">
-                    {document()?.title || fileId()}
-                  </h1>
-                  <div class="doc-meta">
-                    <span translate="no">{fileId()}</span>
-                    <Show when={document()?.updatedAt}>
-                      <span class="dot">·</span>
-                      {new Intl.DateTimeFormat("zh-CN", {
-                        month: "numeric",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }).format(document()!.updatedAt)}
-                    </Show>
+                  <div class="doc-head-text">
+                    <h1 class="doc-title" translate="no">
+                      {document()?.title || fileId()}
+                    </h1>
+                    <div class="doc-meta">
+                      <span translate="no">{fileId()}</span>
+                      <Show when={document()?.updatedAt}>
+                        <span class="dot" aria-hidden="true">·</span>
+                        <span>
+                          {new Intl.DateTimeFormat("zh-CN", {
+                            month: "numeric",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }).format(document()!.updatedAt)}
+                        </span>
+                      </Show>
+                      <Show when={workspace.canEdit()}>
+                        <span class="dot" aria-hidden="true">·</span>
+                        <button class="doc-action" type="button" onClick={() => void save()}>
+                          保存
+                        </button>
+                      </Show>
+                    </div>
                   </div>
                 </div>
 
@@ -537,20 +585,49 @@ export function WorkspaceView() {
         </Resizable>
       </div>
 
-      <footer class="dock">
-        <Input
-          aria-label="问 Agent"
-          placeholder="问 Agent：这段怎么改？"
-          value={question()}
-          onInput={(event: Event) => setQuestion((event.target as HTMLInputElement).value)}
-          onKeyDown={(event: KeyboardEvent) => {
-            if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) void ask();
+      <Show when={paletteOpen()}>
+        <div
+          class="palette-layer"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setPaletteOpen(false);
           }}
-        />
-        <Button disabled={asking() || !question().trim()} onClick={() => void ask()}>
-          {asking() ? "…" : "提问"}
-        </Button>
-      </footer>
+        >
+          <div class="palette" role="dialog" aria-modal="true" aria-label="问 Agent">
+            <div class="palette-row">
+              <input
+                ref={(element) => (paletteInput = element)}
+                class="palette-input"
+                aria-label="问 Agent"
+                placeholder="问 Agent：这段怎么改？"
+                value={question()}
+                onInput={(event) => setQuestion(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) void ask();
+                }}
+              />
+              <Button disabled={asking() || !question().trim()} onClick={() => void ask()}>
+                {asking() ? "…" : "提问"}
+              </Button>
+            </div>
+            <div class="palette-foot">
+              <button class="ghost" type="button" onClick={() => setDialog("project")}>
+                新建项目
+              </button>
+              <button
+                class="ghost"
+                type="button"
+                disabled={!workspace.projectId() || !workspace.canEdit()}
+                onClick={() => setDialog("document")}
+              >
+                新建文档
+              </button>
+              <span class="spacer" />
+              <span class="palette-hint"><kbd>Enter</kbd> 发送</span>
+              <span class="palette-hint"><kbd>Esc</kbd> 关闭</span>
+            </div>
+          </div>
+        </div>
+      </Show>
 
       <NameDialog
         open={dialog() === "project"}

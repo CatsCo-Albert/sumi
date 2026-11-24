@@ -211,24 +211,86 @@ button {
   padding-right: 0.375rem;
 }
 
-.project-select {
-  appearance: none;
-  background: var(--surface) var(--ui-icon-chevron) no-repeat right 0.5rem center /
-    0.8125rem;
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  height: 1.875rem;
-  padding: 0 1.75rem 0 0.5625rem;
-  font: inherit;
-  font-size: var(--text-sm);
-  max-width: 12rem;
-  cursor: pointer;
-  transition: border-color 150ms var(--ease), background-color 150ms var(--ease);
+/* The header is a location, not a menu bar: brand, where you are, one entry to
+   the command bar, and state. Actions live where their object is. */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
 }
 
-.project-select:hover {
+.crumb-select {
+  appearance: none;
+  background: transparent var(--ui-icon-chevron) no-repeat right 0.25rem center /
+    0.75rem;
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-control) - 2px);
+  height: 1.625rem;
+  padding: 0 1.125rem 0 0.375rem;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  max-width: 11rem;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.crumb-select:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--line);
+}
+
+.crumb-sep {
+  color: var(--line-strong);
+  font-size: var(--text-sm);
+}
+
+.crumb-current {
+  min-width: 0;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.cmd-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 1.75rem;
+  padding: 0 0.375rem 0 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), color 150ms var(--ease),
+    background-color 150ms var(--ease);
+}
+
+.cmd-trigger:hover {
   border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 1.125rem;
+  padding: 0 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  background: var(--surface-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  line-height: 1;
+  color: var(--text-muted);
 }
 
 .spacer {
@@ -329,6 +391,46 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
+.pane-foot {
+  flex: 0 0 auto;
+  padding: 0.375rem;
+  border-top: 1px solid var(--line);
+}
+
+.pane-add {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
+}
+
+.pane-add:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.pane-add:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* The file list scrolls; the footer stays put. */
+.pane-docs > [data-slot="scroll-area"] {
+  flex: 1;
+  min-height: 0;
+}
+
 .pane-main {
   display: flex;
   flex-direction: column;
@@ -376,9 +478,15 @@ button {
   color: var(--text-muted);
 }
 
+/* Drawn, not typed: the ▾ glyph fell back to a dot in the CJK font stack. */
 .tree-caret {
-  font-size: 0.5rem;
-  opacity: 0.65;
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 0.25rem solid transparent;
+  border-right: 0.25rem solid transparent;
+  border-top: 0.3125rem solid currentColor;
+  opacity: 0.5;
 }
 
 .tree-file {
@@ -413,8 +521,34 @@ button {
 
 .doc-head {
   flex: 0 0 auto;
-  padding: 0.8125rem 1.25rem 0.875rem;
+  padding: 1rem 1.25rem 0.875rem;
   border-bottom: 1px solid var(--line);
+}
+
+.doc-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.doc-action {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.doc-action:hover {
+  color: var(--text);
 }
 
 h1.doc-title {
@@ -461,12 +595,14 @@ h1.doc-title {
   font-family: var(--font-mono);
   font-size: var(--text-base);
   line-height: 1.7;
+  /* Centre the gutter and the text together: capping only the content left the
+     line numbers stranded at the pane edge, detached from the words. */
+  justify-content: center;
 }
 
 /* Prose measure: 72ch keeps a long document readable without a wall of text. */
 .editor-host .cm-content {
   max-width: var(--measure);
-  margin-inline: auto;
   padding: 0.875rem 1.5rem 6rem 0.875rem;
 }
 
@@ -735,20 +871,73 @@ h1.doc-title {
 
 /* ------------------------------------------------------------------ dock -- */
 
-.dock {
+/* The command bar is summoned, not parked: a permanent input at the bottom of a
+   workspace competes with the document for attention all day. */
+.palette-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  border-top: 1px solid var(--line);
-  background: var(--surface-raised);
-  flex: 0 0 auto;
+  padding-top: 12vh;
+  background: oklch(0 0 0 / 0.28);
+  backdrop-filter: blur(2px);
 }
 
-.dock > *:first-child {
+.palette {
+  width: min(34rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  box-shadow: 0 24px 56px -20px light-dark(oklch(0 0 0 / 0.34), oklch(0 0 0 / 0.75));
+}
+
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.palette-input {
   flex: 1;
-  max-width: 32rem;
+  min-width: 0;
+  height: 2.125rem;
+  padding-inline: 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  transition: border-color 150ms var(--ease);
+}
+
+.palette-input:hover {
+  border-color: var(--line-strong);
+}
+
+.palette-input:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: -1px;
+  border-color: var(--ui-ring-border);
+}
+
+.palette-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.palette-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
 }
 
 /* -------------------------------------------------------------- fallbacks -- */
