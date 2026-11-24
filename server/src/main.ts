@@ -18,6 +18,9 @@ import { readFile, stat } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { actorFromRequest } from "../../lib/http-auth";
+import { callAgent } from "../../src/ui-bus/agent-bridge";
+import { handleMcpRequest } from "./mcp";
 
 const APP_PORT = Number(process.env.APP_PORT || 8794);
 const WS_PORT = Number(process.env.WS_PORT || 1234);
@@ -36,7 +39,8 @@ const fromHono = (handler: RouteHandler, c: Context) =>
   handler(c.req.raw, { params: Promise.resolve(c.req.param() as Params) });
 
 const routeTable: Array<{ path: string; module: string }> = [
-  { path: "/api/agent/call", module: "../../app/api/agent/call/route.ts" },
+  /* Only the page-facing half of the agent bridge remains a route: the
+     agent-facing half is the MCP server below. */
   { path: "/api/agent/result", module: "../../app/api/agent/result/route.ts" },
   { path: "/api/auth/me", module: "../../app/api/auth/me/route.ts" },
   { path: "/api/documents/content", module: "../../app/api/documents/content/route.ts" },
@@ -116,6 +120,17 @@ async function main() {
   }
   api.get("/api/health", (c) =>
     c.json({ ok: true, routes: mounted.length, basePath: BASE_PATH })
+  );
+
+  /* The agent-facing surface. A runtime points its MCP bridge here and gets
+     snapshot / query / act as ordinary tools, instead of learning a private
+     HTTP pair. Mounted with the rest of `api`, so it answers at both `/mcp`
+     and `/<base>/mcp`. */
+  api.all("/mcp", (c) =>
+    handleMcpRequest(c.req.raw, {
+      resolveActor: (request) => actorFromRequest(request),
+      callAgent,
+    })
   );
 
   // One instance serves both spellings.
