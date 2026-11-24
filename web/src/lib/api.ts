@@ -218,8 +218,14 @@ export const server = {
     api.get<{ intents: Array<Record<string, unknown>> }>(
       `/api/intents?projectId=${encodeURIComponent(projectId)}&limit=${limit}`
     ),
+  /* The route reads `prompt`; the UI's own wording is `question`. Mapping here
+     keeps the translation in one place instead of at every call site. */
   askAgent: (payload: { projectId: string; fileId?: string; question: string }) =>
-    api.post<{ intent?: Record<string, unknown> }>("/api/intents", payload),
+    api.post<{ intent?: Record<string, unknown> }>("/api/intents", {
+      projectId: payload.projectId,
+      fileId: payload.fileId,
+      prompt: payload.question,
+    }),
   agentSetup: (projectId: string, subjectId: string) =>
     api.get<Record<string, unknown>>(
       `/api/projects/${projectId}/agent-setup?subjectId=${encodeURIComponent(subjectId)}`
