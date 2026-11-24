@@ -1,77 +1,94 @@
 /*
  * Sumi workspace — visual layer.
  *
- * The components come from ui-sdk, which is headless: its own `web.css` draws
- * every part from the `--ui-*` tokens below. So "the component style" here is
- * these tokens plus the layout rules under them. The palette, the 10px radius,
- * the compact control heights and the hairline borders follow coss ui (the
- * Cal.com design system) — its React components cannot be installed into a
- * Solid app, but its design language is exactly what these tokens express.
+ * Mode: Operate. The visitor is mid-task, so the bar is earned familiarity:
+ * scanability, one component vocabulary, and precision rather than expression.
+ *
+ * The components come from ui-sdk, which is headless — its own `web.css` draws
+ * every part from these tokens, so the appearance is decided here. Measurements
+ * follow coss ui (the Cal.com design system): 36/32px controls, hairline
+ * borders, a pill tab trough. Its React components cannot be installed into a
+ * Solid app; its measurements can.
+ *
+ * Rules this file is held to:
+ *   - one type family, fixed rem steps at ~1.14 ratio, no fluid headings
+ *   - elevation declared once: a flat panel gets a border, a floating one a
+ *     shadow, never both
+ *   - no inset side stripes, no zero-offset halos, no bordered card inside a
+ *     bordered panel
+ *   - browser surfaces (selection, caret, scrollbar, focus ring, numerals)
+ *     are themed; they are the parts no design system draws for you
+ *   - transitions 150–250ms and only for state
  */
 
 :root {
   color-scheme: light dark;
 
-  /* --- ui-sdk tokens: the appearance of every primitive ------------------ */
+  /* --- type scale: fixed rem, ratio ~1.14 between steps ----------------- */
+  --text-2xs: 0.6875rem; /* 11px — meta, counts */
+  --text-xs: 0.75rem; /* 12px — secondary */
+  --text-sm: 0.8125rem; /* 13px — controls, labels */
+  --text-base: 0.875rem; /* 14px — body, UI default */
+  --text-md: 1rem; /* 16px — section titles */
+  --text-lg: 1.1875rem; /* 19px — page title */
+  --text-xl: 1.375rem; /* 22px — the one display moment */
 
-  --ui-background: light-dark(oklch(1 0 0), oklch(0.152 0 0));
-  --ui-foreground: light-dark(oklch(0.205 0 0), oklch(0.965 0 0));
-  --ui-muted: light-dark(oklch(0.97 0 0), oklch(0.213 0 0));
-  --ui-muted-foreground: light-dark(oklch(0.505 0 0), oklch(0.68 0 0));
-  --ui-border: light-dark(oklch(0.916 0 0), oklch(0.262 0 0));
-  --ui-input: light-dark(oklch(0.87 0 0), oklch(0.36 0 0));
+  /* --- radii: pills for small controls, 12–14px for containers ---------- */
+  --radius-control: 0.5rem;
+  --radius-card: 0.75rem;
+  --radius-panel: 0.875rem;
+
+  /* --- ui-sdk tokens ---------------------------------------------------- */
+  --ui-background: light-dark(oklch(1 0 0), oklch(0.16 0 0));
+  --ui-foreground: light-dark(oklch(0.205 0 0), oklch(0.96 0 0));
+  --ui-muted: light-dark(oklch(0.966 0 0), oklch(0.225 0 0));
+  --ui-muted-foreground: light-dark(oklch(0.485 0 0), oklch(0.7 0 0));
+  --ui-border: light-dark(oklch(0.906 0 0), oklch(0.275 0 0));
+  --ui-input: light-dark(oklch(0.855 0 0), oklch(0.375 0 0));
   --ui-primary: var(--ui-foreground);
   --ui-primary-foreground: var(--ui-background);
-  --ui-destructive: light-dark(oklch(0.577 0.212 25.7), oklch(0.704 0.176 24.1));
-  --ui-ring: light-dark(oklch(0.72 0 0), oklch(0.44 0 0));
-  --ui-ring-border: light-dark(oklch(0.62 0 0), oklch(0.55 0 0));
-  --ui-overlay: light-dark(oklch(1 0 0 / 0.72), oklch(0 0 0 / 0.72));
-
-  /* coss ui draws a 1px inset highlight on raised parts instead of a drop
-     shadow; the second value is the same idea for anything that floats. */
-  --ui-shadow:
-    0 1px 2px light-dark(oklch(0 0 0 / 0.05), oklch(0 0 0 / 0.36)),
-    0 8px 24px -10px light-dark(oklch(0 0 0 / 0.14), oklch(0 0 0 / 0.55));
-
-  /* rounded-lg in coss ui, expressed as the token the primitives divide. */
-  --ui-radius: 0.625rem;
+  --ui-destructive: light-dark(oklch(0.55 0.206 26), oklch(0.71 0.17 25));
+  --ui-ring: light-dark(oklch(0.62 0.12 254), oklch(0.72 0.13 254));
+  --ui-ring-border: light-dark(oklch(0.58 0.12 254), oklch(0.66 0.11 254));
+  --ui-overlay: light-dark(oklch(1 0 0 / 0.7), oklch(0 0 0 / 0.7));
+  --ui-shadow: 0 12px 32px -12px light-dark(oklch(0 0 0 / 0.18), oklch(0 0 0 / 0.6));
+  --ui-radius: var(--radius-control);
   --ui-spacing: 0.25rem;
-  --ui-font-size: 0.875rem;
+  --ui-font-size: var(--text-base);
   --ui-line-height: 1.5;
   --ui-font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC",
-    "Source Han Sans SC", sans-serif;
+    "Source Han Sans SC", "PingFang SC", sans-serif;
   --ui-font-mono:
-    ui-monospace, "SF Mono", "Noto Sans Mono", Menlo, Consolas, monospace;
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas,
+    "Noto Sans Mono", monospace;
   --ui-icon-size: 1rem;
   --ui-tree-indent: 0.875rem;
 
-  /* --- the workspace's own surfaces ------------------------------------- */
-
-  --surface: var(--ui-background);
-  --surface-raised: light-dark(oklch(0.988 0 0), oklch(0.185 0 0));
-  --surface-sunken: light-dark(oklch(0.976 0 0), oklch(0.128 0 0));
-  --surface-hover: light-dark(oklch(0.962 0 0), oklch(0.24 0 0));
-  --surface-active: light-dark(oklch(0.944 0 0), oklch(0.276 0 0));
+  /* --- surfaces: content brightest, chrome a second neutral layer -------- */
+  --surface: light-dark(oklch(1 0 0), oklch(0.16 0 0));
+  --surface-raised: light-dark(oklch(0.976 0 0), oklch(0.19 0 0));
+  --surface-sunken: light-dark(oklch(0.959 0 0), oklch(0.135 0 0));
+  --surface-hover: light-dark(oklch(0.958 0 0), oklch(0.235 0 0));
+  --surface-active: light-dark(oklch(0.936 0 0), oklch(0.275 0 0));
 
   --line: var(--ui-border);
-  --line-strong: light-dark(oklch(0.878 0 0), oklch(0.318 0 0));
+  --line-strong: light-dark(oklch(0.862 0 0), oklch(0.335 0 0));
   --text: var(--ui-foreground);
   --text-muted: var(--ui-muted-foreground);
-  --text-faint: light-dark(oklch(0.62 0 0), oklch(0.55 0 0));
-  --accent: light-dark(oklch(0.545 0.208 258), oklch(0.72 0.152 254));
-  --accent-soft: light-dark(oklch(0.955 0.024 258), oklch(0.3 0.062 258));
+  /* Not a third grey: secondary text keeps body contrast so it stays legible
+     at 11px, which is where a lighter tint would fall under 4.5:1. */
+  --text-faint: var(--ui-muted-foreground);
+  --accent: light-dark(oklch(0.52 0.19 258), oklch(0.74 0.13 256));
+  --accent-tint: light-dark(oklch(0.955 0.022 258), oklch(0.29 0.055 258));
   --danger: var(--ui-destructive);
 
-  --radius-sm: calc(var(--ui-radius) - 4px);
-  --radius-md: calc(var(--ui-radius) - 2px);
-  --radius-lg: var(--ui-radius);
-  --radius-xl: calc(var(--ui-radius) + 4px);
-
-  --row-height: 1.875rem;
-  --gutter: 0.75rem;
+  --row: 1.875rem;
+  --gutter: 0.875rem;
+  --measure: 72ch;
 
   --font-mono: var(--ui-font-mono);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 * {
@@ -86,11 +103,11 @@ body,
 }
 
 body {
-  background: var(--surface);
+  background: var(--surface-sunken);
   color: var(--text);
   font-family: var(--ui-font-sans);
-  font-size: var(--ui-font-size);
-  line-height: var(--ui-line-height);
+  font-size: var(--text-base);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -100,9 +117,51 @@ button {
   color: inherit;
 }
 
+/* Browser surfaces carry the design too. */
+::selection {
+  background: var(--accent-tint);
+  color: var(--text);
+}
+
+* {
+  caret-color: var(--accent);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: content-box;
+}
+
 :focus-visible {
   outline: 2px solid var(--ui-ring);
-  outline-offset: 1px;
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+/* Numbers that sit in a column must not jitter. */
+.editor-foot,
+.doc-meta,
+.edit-meta,
+.version-head {
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------------------------------------------------------------- shell -- */
@@ -118,34 +177,34 @@ button {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem var(--gutter);
+  padding: 0 1rem;
+  height: 2.875rem;
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-raised);
   flex: 0 0 auto;
 }
 
 .brand {
   font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  padding-right: 0.25rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  padding-right: 0.375rem;
 }
 
 .project-select {
   appearance: none;
   background: var(--surface) var(--ui-icon-chevron) no-repeat right 0.5rem center /
-    0.875rem;
-  background-blend-mode: normal;
+    0.8125rem;
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 0 var(--ui-icon-size) 0 0.625rem;
-  height: var(--row-height);
+  border-radius: var(--radius-control);
+  height: 1.875rem;
+  padding: 0 1.75rem 0 0.5625rem;
   font: inherit;
-  font-size: 0.8125rem;
-  max-width: 13rem;
+  font-size: var(--text-sm);
+  max-width: 12rem;
   cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease;
+  transition: border-color 150ms var(--ease), background-color 150ms var(--ease);
 }
 
 .project-select:hover {
@@ -159,12 +218,12 @@ button {
 .status,
 .presence,
 .who {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .status::before {
@@ -172,7 +231,8 @@ button {
   width: 0.375rem;
   height: 0.375rem;
   border-radius: 999px;
-  background: var(--text-faint);
+  background: var(--line-strong);
+  transition: background-color 200ms var(--ease);
 }
 
 .status[data-live="true"] {
@@ -180,8 +240,7 @@ button {
 }
 
 .status[data-live="true"]::before {
-  background: oklch(0.72 0.17 152);
-  box-shadow: 0 0 0 3px oklch(0.72 0.17 152 / 0.16);
+  background: oklch(0.65 0.16 152);
 }
 
 .role {
@@ -190,15 +249,27 @@ button {
   border-radius: 999px;
   background: var(--surface-hover);
   border: 1px solid var(--line);
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
+}
+
+/* 顶栏右侧是一组状态，靠间距分组，不靠再加一条竖线 */
+.status,
+.presence {
+  padding-right: 0.5rem;
+}
+
+.presence {
+  border-right: 1px solid var(--line);
+  padding-right: 0.625rem;
+  margin-right: 0.125rem;
 }
 
 .notice {
   padding: 0.4375rem var(--gutter);
-  background: var(--accent-soft);
+  background: var(--accent-tint);
   border-bottom: 1px solid var(--line);
-  font-size: 0.8125rem;
+  font-size: var(--text-xs);
   color: var(--text);
 }
 
@@ -209,7 +280,7 @@ button {
   flex-direction: column;
 }
 
-/* ui-sdk lays the panels out itself; it only needs to be told to fill. */
+/* ui-sdk lays the panels out; it only needs to be told to fill. */
 [data-slot="resizable"] {
   flex: 1;
   min-height: 0;
@@ -260,85 +331,87 @@ button {
 /* ------------------------------------------------------------ file tree -- */
 
 .file-tree {
-  padding: 0.375rem;
+  padding: 0.3125rem;
   display: flex;
   flex-direction: column;
-  gap: 1px;
 }
 
 .tree-row {
   display: flex;
   align-items: center;
-  min-height: var(--row-height);
+  min-height: var(--row);
 }
 
 .tree-folder {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  gap: 0.3125rem;
   padding: 0.25rem 0.375rem;
-  letter-spacing: 0.01em;
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .tree-caret {
   font-size: 0.5rem;
-  opacity: 0.6;
+  opacity: 0.65;
 }
 
 .tree-file {
-  background: none;
-  border: 0;
-  padding: 0.3125rem 0.5rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-  font-size: 0.8125rem;
   width: 100%;
   min-width: 0;
+  padding: 0.3125rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text);
-  transition: background-color 100ms ease;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease);
 }
 
 .tree-file:hover {
   background: var(--surface-hover);
 }
 
+/* A flat tint, not an inset ring: a one-sided stripe or hairline frame around a
+   single row reads as an accidental border. */
 .tree-file[aria-current="true"] {
   background: var(--surface-active);
   font-weight: 500;
-  box-shadow: inset 0 0 0 1px var(--line-strong);
 }
 
 /* ---------------------------------------------------------------- editor -- */
 
 .doc-head {
-  padding: 0.6875rem var(--gutter);
-  border-bottom: 1px solid var(--line);
   flex: 0 0 auto;
+  padding: 0.8125rem 1.25rem 0.875rem;
+  border-bottom: 1px solid var(--line);
 }
 
 .doc-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.3;
 }
 
 .doc-meta {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  margin-top: 0.0625rem;
+  margin-top: 0.125rem;
   font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
 }
 
 .dot {
   margin: 0 0.375rem;
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
 .editor-host {
@@ -352,50 +425,53 @@ button {
   height: 100%;
 }
 
-.editor-host .cm-scroller {
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  line-height: 1.7;
-  padding: 0.75rem 0;
+.editor-host .cm-editor.cm-focused {
+  outline: none;
 }
 
+.editor-host .cm-scroller {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  line-height: 1.7;
+}
+
+/* Prose measure: 72ch keeps a long document readable without a wall of text. */
 .editor-host .cm-content {
-  padding: 0 1.25rem 3rem 0.5rem;
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding: 0.875rem 1.5rem 6rem 0;
 }
 
 .editor-host .cm-gutters {
   background: var(--surface);
-  border-right: 1px solid var(--line);
-  color: var(--text-faint);
+  border-right: 0;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  padding-left: 0.5rem;
+  min-width: 2.75rem;
 }
 
 .editor-host .cm-activeLineGutter {
-  background: var(--surface-hover);
-  color: var(--text-muted);
+  background: transparent;
+  color: var(--text);
 }
 
 .editor-host .cm-activeLine {
-  background: light-dark(oklch(0.976 0 0), oklch(0.196 0 0));
-}
-
-.editor-host .cm-selectionBackground,
-.editor-host .cm-content ::selection {
-  background: var(--accent-soft) !important;
+  background: light-dark(oklch(0.985 0 0), oklch(0.195 0 0));
 }
 
 .editor-host .cm-cursor {
-  border-left-color: var(--accent);
+  border-left: 1.5px solid var(--accent);
 }
 
 .editor-foot {
   display: flex;
   align-items: center;
-  gap: 0.125rem;
   padding: 0.3125rem var(--gutter);
   border-top: 1px solid var(--line);
   background: var(--surface-raised);
-  font-size: 0.6875rem;
-  color: var(--text-faint);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
   flex: 0 0 auto;
 }
 
@@ -405,18 +481,19 @@ button {
   padding: 0.375rem;
   display: flex;
   flex-direction: column;
-  gap: 1px;
 }
 
 .outline-row {
-  padding: 0.3125rem 0.5rem;
-  font-size: 0.8125rem;
+  padding: 0.4375rem 0.625rem;
+  border-radius: var(--radius-control);
+  font-size: var(--text-sm);
+  line-height: 1.5;
   color: var(--text-muted);
-  border-radius: var(--radius-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background-color 100ms ease, color 100ms ease;
+  cursor: default;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
 }
 
 .outline-row:hover {
@@ -430,16 +507,41 @@ button {
   padding: 0.375rem;
   display: flex;
   flex-direction: column;
+}
+
+/* Rows divided by a hairline, not cards inside a panel: a bordered box in a
+   bordered panel is two frames for one piece of content. */
+.member,
+.edit-card,
+.version {
+  display: flex;
   gap: 0.375rem;
+  padding: 0.5rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.member,
+.version {
+  flex-direction: column;
 }
 
 .member {
-  display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  padding: 0.25rem;
-  border-radius: var(--radius-sm);
+  border-bottom: 0;
+}
+
+.member + .member {
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.member {
+  border-radius: var(--radius-control);
+  border-bottom: 0;
 }
 
 .member:hover {
@@ -447,31 +549,29 @@ button {
 }
 
 .avatar {
-  width: 1.375rem;
-  height: 1.375rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 0.6875rem;
-  color: oklch(1 0 0);
+  font-size: var(--text-2xs);
   font-weight: 600;
-  flex: 0 0 auto;
-  box-shadow: inset 0 0 0 1px oklch(0 0 0 / 0.12);
+  color: oklch(1 0 0);
 }
 
 .member-name {
   flex: 1;
   min-width: 0;
+  font-size: var(--text-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .member-role {
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
 .side-actions {
@@ -481,52 +581,40 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
-.edit-card,
-.version {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 0.5625rem 0.625rem;
-  background: var(--surface);
-  display: flex;
-  flex-direction: column;
-  gap: 0.3125rem;
-  transition: border-color 120ms ease;
-}
-
-.edit-card:hover,
-.version:hover {
-  border-color: var(--line-strong);
+.edit-card:last-child,
+.version:last-child {
+  border-bottom: 0;
 }
 
 .edit-head,
 .version-head {
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1.4;
 }
 
 .edit-meta {
-  font-size: 0.6875rem;
+  font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .edit-actions {
   display: flex;
-  gap: 0.375rem;
   align-items: center;
-  margin-top: 0.125rem;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
 }
 
 .ghost {
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
   padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: none;
   color: var(--text-muted);
+  font-size: var(--text-xs);
   cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease,
-    background-color 120ms ease;
+  transition: background-color 150ms var(--ease), border-color 150ms var(--ease),
+    color 150ms var(--ease);
 }
 
 .ghost:hover {
@@ -539,16 +627,18 @@ button {
 
 .dock {
   display: flex;
-  gap: 0.375rem;
   align-items: center;
-  padding: 0.4375rem var(--gutter);
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
   border-top: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--surface-raised);
   flex: 0 0 auto;
 }
 
 .dock > *:first-child {
   flex: 1;
+  max-width: 32rem;
 }
 
 /* -------------------------------------------------------------- fallbacks -- */
@@ -559,13 +649,14 @@ button {
   display: grid;
   place-items: center;
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }
 
 .empty {
-  padding: 0.875rem 0.625rem;
-  color: var(--text-faint);
-  font-size: 0.75rem;
+  padding: 1.25rem 0.75rem;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
   text-align: center;
 }
 
@@ -577,96 +668,96 @@ button {
   background: var(--surface-sunken);
 }
 
+/* Floats above the page, so it takes the shadow and no border. */
 .signin-card {
   width: 100%;
-  max-width: 23.75rem;
+  max-width: 24rem;
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
   padding: 1.375rem;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--line);
+  border: 0;
+  border-radius: var(--radius-panel);
   background: var(--surface);
   box-shadow: var(--ui-shadow);
 }
 
 .signin-title {
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 .signin-hint,
 .signin-foot {
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--text-muted);
+  line-height: 1.55;
 }
 
 .signin-foot {
   text-align: center;
-  color: var(--text-faint);
 }
 
 .signin-input {
   width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
   background: var(--surface-sunken);
   color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.625rem;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   resize: vertical;
+  transition: border-color 150ms var(--ease);
 }
 
-.signin-input:focus-visible {
-  outline: 2px solid var(--ui-ring);
-  outline-offset: 0;
+.signin-input:hover {
+  border-color: var(--line-strong);
 }
 
 .signin-error {
+  font-size: var(--text-xs);
   color: var(--danger);
-  font-size: 0.75rem;
 }
 
 .dialog-actions {
   display: flex;
-  gap: 0.375rem;
   justify-content: flex-end;
+  gap: 0.375rem;
   margin-top: 0.375rem;
 }
+
 /* ==========================================================================
- * ui-sdk parts, redrawn to coss ui's specifications.
+ * ui-sdk parts, redrawn to coss ui's measurements.
  *
- * ui-sdk ships its own default look in `@layer ui-sdk` — a thin, boxy one. These
- * rules sit outside any layer, so they win, and each block below follows the
- * measurements from coss ui's registry source: control heights, radii, borders
- * and the muted hover it uses. The behaviour underneath (focus, keyboard, ARIA)
- * is untouched, which is the point: same components, coss appearance.
+ * ui-sdk ships a default look inside `@layer ui-sdk`; these rules sit outside
+ * any layer and win. Each block follows the numbers in coss's registry source:
+ * control heights, radii, hairline borders, muted hover. Behaviour underneath
+ * (focus, keyboard, ARIA) is untouched.
  * ========================================================================== */
 
-/* --- button: 36px tall, 32px from sm up, 10px radius, hairline border ----- */
+/* --- button: 36px, 32px from sm up ------------------------------------- */
 
 [data-slot="button"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   flex-shrink: 0;
   height: 2.25rem;
-  padding-inline: 0.6875rem;
+  padding-inline: 0.75rem;
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--text);
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
-  transition: background-color 120ms ease, border-color 120ms ease,
-    box-shadow 120ms ease;
+  transition: background-color 150ms var(--ease),
+    border-color 150ms var(--ease);
 }
 
 [data-slot="button"]:hover {
@@ -676,42 +767,44 @@ button {
 
 [data-slot="button"]:active {
   background: var(--surface-active);
-  box-shadow: none;
 }
 
 [data-slot="button"][disabled],
 [data-slot="button"][aria-disabled="true"] {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
-  box-shadow: none;
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+[data-slot="button"][data-pending] {
+  cursor: progress;
 }
 
 [data-slot="button"] svg {
-  width: 1rem;
-  height: 1rem;
-  opacity: 0.8;
+  width: 0.9375rem;
+  height: 0.9375rem;
+  opacity: 0.75;
 }
 
 @media (min-width: 40rem) {
   [data-slot="button"] {
     height: 2rem;
-    font-size: 0.8125rem;
   }
 }
 
-/* --- input: 34px tall, same radius and hairline ------------------------- */
+/* --- input: 34px, same vocabulary as the button ------------------------- */
 
 [data-slot="input"],
 [data-slot="input-group"] {
   height: 2.125rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
   padding-inline: 0.6875rem;
-  font-size: 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
   color: var(--text);
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  font-size: var(--text-sm);
+  transition: border-color 150ms var(--ease);
 }
 
 [data-slot="input"]:hover,
@@ -719,29 +812,30 @@ button {
   border-color: var(--line-strong);
 }
 
+/* Border and ring, no offset halo: a 0-offset glow is decoration. */
 [data-slot="input"]:focus-visible,
 [data-slot="input-group"]:focus-within {
-  outline: none;
+  outline: 2px solid var(--ui-ring);
+  outline-offset: -1px;
   border-color: var(--ui-ring-border);
-  box-shadow: 0 0 0 3px oklch(from var(--ui-ring) l c h / 0.18);
 }
 
 [data-slot="input"]::placeholder {
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
-/* --- tabs: a pill-shaped trough with a raised selected tab --------------- */
+/* --- tabs: a pill trough with a raised selected tab --------------------- */
 
 [data-slot="tabs-list"] {
   display: inline-flex;
   align-items: center;
-  gap: 0.125rem;
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface-sunken);
-  padding: 0.125rem;
-  margin: 0.375rem 0.375rem 0;
   align-self: flex-start;
+  gap: 0.125rem;
+  margin: 0.5rem 0.5rem 0;
+  padding: 0.1875rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
 }
 
 [data-slot="tabs-list"][data-orientation="vertical"] {
@@ -751,69 +845,69 @@ button {
 }
 
 [data-slot="tabs-tab"] {
-  height: 1.75rem;
-  padding-inline: 0.5625rem;
+  height: 1.875rem;
   margin: 0;
+  padding-inline: 0.75rem;
   border: 0;
-  border-radius: calc(var(--radius-lg) - 3px);
+  border-radius: calc(var(--radius-control) - 2px);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
 }
 
 [data-slot="tabs-tab"]:hover {
-  color: var(--text);
   background: var(--surface-hover);
+  color: var(--text);
 }
 
 [data-slot="tabs-tab"][data-state="active"],
 [data-slot="tabs-tab"][aria-selected="true"] {
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 1px 2px oklch(0 0 0 / 0.06),
-    inset 0 0 0 1px var(--line);
+  box-shadow: 0 1px 2px light-dark(oklch(0 0 0 / 0.07), oklch(0 0 0 / 0.4));
 }
 
 [data-slot="tabs-panel"] {
-  min-height: 0;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding-top: 0.25rem;
 }
 
-/* --- dialog: 16px radius, roomy padding, blurred backdrop ---------------- */
+/* --- dialog: floats, so shadow only ------------------------------------ */
 
 [data-slot="dialog-backdrop"] {
   background: oklch(0 0 0 / 0.32);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(3px);
 }
 
 [data-slot="dialog-content"] {
-  border: 1px solid var(--line);
-  border-radius: calc(var(--radius-xl) + 4px);
+  min-width: 21rem;
+  padding: 1.375rem;
+  border: 0;
+  border-radius: var(--radius-panel);
   background: var(--surface);
-  box-shadow: 0 24px 48px -12px oklch(0 0 0 / 0.35);
-  padding: 1.5rem;
-  min-width: 22rem;
+  box-shadow: 0 20px 48px -16px light-dark(oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.7));
 }
 
 [data-slot="dialog-title"] {
-  font-size: 0.9375rem;
+  font-size: var(--text-md);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 [data-slot="dialog-description"] {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
   margin-top: 0.125rem;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.55;
 }
 
-/* --- toolbar: compact, borderless until hovered ------------------------- */
+/* --- toolbar: borderless until hovered --------------------------------- */
 
 [data-slot="toolbar"] {
   display: flex;
@@ -825,13 +919,13 @@ button {
   height: 1.875rem;
   padding-inline: 0.5rem;
   border: 1px solid transparent;
-  border-radius: calc(var(--radius-lg) - 3px);
+  border-radius: calc(var(--radius-control) - 2px);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
 }
 
 [data-slot="toolbar-button"]:hover {
@@ -852,21 +946,20 @@ button {
   background: var(--line);
 }
 
-/* --- resizable: a hairline that thickens on hover ----------------------- */
+/* --- resizable: a hairline that thickens under the pointer -------------- */
 
 [data-slot="resizable-handle"] {
   width: 1px;
   background: var(--line);
-  transition: background-color 140ms ease, width 140ms ease;
+  transition: background-color 150ms var(--ease);
 }
 
 [data-slot="resizable-handle"]:hover,
 [data-slot="resizable-handle"]:focus-visible {
-  width: 2px;
   background: var(--ui-ring-border);
 }
 
-/* --- scroll area: a slim thumb that only shows on hover ----------------- */
+/* --- scroll area: slim thumb, visible on hover ------------------------- */
 
 [data-slot="scroll-area-thumb"] {
   background: var(--line-strong);
@@ -874,5 +967,5 @@ button {
 }
 
 [data-slot="scroll-area-thumb"]:hover {
-  background: var(--text-faint);
+  background: var(--text-muted);
 }
