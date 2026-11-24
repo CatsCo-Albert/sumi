@@ -19,6 +19,7 @@
     "@codemirror/search": "^6.5.11",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.8",
+    "@lezer/highlight": "^1.2.5",
     "@solidjs/router": "2.0.1",
     "@solidjs/web": "2.0.3",
     "@ui-sdk/core": "0.1.0-beta.16",

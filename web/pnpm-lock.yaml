@@ -38,6 +38,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.38.8
         version: 6.43.15
+      '@lezer/highlight':
+        specifier: ^1.2.5
+        version: 1.2.5
       '@solidjs/router':
         specifier: 2.0.1
         version: 2.0.1(@solidjs/web@2.0.3(solid-js@2.0.3))(solid-js@2.0.3)

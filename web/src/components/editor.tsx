@@ -30,7 +30,9 @@ import {
   bracketMatching,
   syntaxHighlighting,
   defaultHighlightStyle,
+  HighlightStyle,
 } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import {
   autocompletion,
   completionKeymap,
@@ -71,6 +73,36 @@ export interface EditorHandle {
   destroy: () => void;
 }
 
+/**
+ * Prose styling for the document itself.
+ *
+ * A writing surface reads as words, not as a source file: headings get real
+ * type steps, links take the accent, and only inline code and code blocks go
+ * monospace — which is what `tags.monospace` marks. Rendering the whole editor
+ * in a mono face was the single strongest reason it looked like a code editor.
+ */
+const proseHighlight = HighlightStyle.define([
+  { tag: tags.monospace, fontFamily: "var(--ui-font-mono)", fontSize: "0.9em" },
+  { tag: tags.strong, fontWeight: "650" },
+  { tag: tags.emphasis, fontStyle: "italic" },
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+  {
+    tag: [tags.link, tags.url],
+    color: "var(--accent)",
+    textDecoration: "underline",
+    textUnderlineOffset: "0.18em",
+  },
+  { tag: tags.heading, fontWeight: "650", letterSpacing: "-0.025em" },
+  { tag: tags.heading1, fontSize: "1.55em", lineHeight: "1.25" },
+  { tag: tags.heading2, fontSize: "1.28em", lineHeight: "1.35" },
+  { tag: tags.heading3, fontSize: "1.1em", lineHeight: "1.45" },
+  { tag: tags.heading4, fontSize: "1em" },
+  { tag: tags.quote, color: "var(--text-muted)", fontStyle: "italic" },
+  /* The markdown punctuation (#, **, |) is scaffolding, not content. */
+  { tag: tags.processingInstruction, color: "var(--text-muted)", opacity: "0.5" },
+  { tag: tags.contentSeparator, color: "var(--line-strong)" },
+]);
+
 function extensionsFor(mode: "markdown" | "html", readOnly: boolean) {
   return [
     lineNumbers(),
@@ -82,6 +114,7 @@ function extensionsFor(mode: "markdown" | "html", readOnly: boolean) {
     EditorState.allowMultipleSelections.of(true),
     indentOnInput(),
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    syntaxHighlighting(proseHighlight),
     bracketMatching(),
     closeBrackets(),
     autocompletion(),

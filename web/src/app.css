@@ -52,9 +52,11 @@
   --text-xl: 1.75rem; /* 28px — the document title */
 
   /* --- radii: pills for small controls, 12–14px for containers ---------- */
-  --radius-control: 0.5rem;
-  --radius-card: 0.75rem;
-  --radius-panel: 0.875rem;
+  /* Geist's steps: 4px micro, 6px control, 8px card, 12px floating. */
+  --radius-xs: 0.25rem;
+  --radius-control: 0.375rem;
+  --radius-card: 0.5rem;
+  --radius-panel: 0.75rem;
 
   /* --- ui-sdk tokens ---------------------------------------------------- */
   /* Geist's scale: pure black on white, #666 for secondary, #eaeaea hairlines. */
@@ -62,7 +64,7 @@
   --ui-foreground: light-dark(#000000, #ededed);
   --ui-muted: light-dark(#fafafa, #111111);
   --ui-muted-foreground: light-dark(#666666, #888888);
-  --ui-border: light-dark(#eaeaea, #1f1f1f);
+  --ui-border: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.1));
   --ui-input: light-dark(oklch(0.855 0 0), oklch(0.375 0 0));
   --ui-primary: var(--ui-foreground);
   --ui-primary-foreground: var(--ui-background);
@@ -87,11 +89,16 @@
   --surface: light-dark(#ffffff, #000000);
   --surface-raised: light-dark(#fafafa, #0a0a0a);
   --surface-sunken: light-dark(#fafafa, #000000);
-  --surface-hover: light-dark(#f2f2f2, #1a1a1a);
-  --surface-active: light-dark(#eaeaea, #262626);
+  --surface-hover: var(--hover);
+  --surface-active: var(--active);
 
-  --line: var(--ui-border);
-  --line-strong: light-dark(#dcdcdc, #333333);
+  /* State layers are alpha, not tinted solids: one value works on white, on
+     #fafafa and on a selected row, where a fixed grey does not. */
+  --hover: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.06));
+  --active: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.1));
+  --line: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.1));
+  --line-strong: light-dark(rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.18));
+  --focus-ring: light-dark(rgba(0, 112, 243, 0.14), rgba(50, 145, 255, 0.2));
   --text: var(--ui-foreground);
   --text-muted: var(--ui-muted-foreground);
   /* Not a third grey: secondary text keeps body contrast so it stays legible
@@ -509,7 +516,13 @@ kbd {
 }
 
 .tree-file:hover {
-  background: var(--surface-hover);
+  background: var(--hover);
+}
+
+.tree-file:focus-visible,
+.outline-row:focus-visible {
+  outline: 2px solid var(--ui-ring);
+  outline-offset: -2px;
 }
 
 /* The selected row is the one place the accent appears in the file list —
@@ -595,9 +608,11 @@ h1.doc-title {
 }
 
 .editor-host .cm-scroller {
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  line-height: 1.7;
+  /* Prose is set in the UI face; only code is monospace, via the highlight
+     style in editor.tsx. */
+  font-family: var(--ui-font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.8;
   /* Centre the gutter and the text together: capping only the content left the
      line numbers stranded at the pane edge, detached from the words. */
   justify-content: center;
@@ -613,9 +628,10 @@ h1.doc-title {
   background: var(--surface);
   border-right: 0;
   color: var(--text-muted);
+  font-family: var(--font-mono);
   font-size: 0.6875rem;
-  padding: 0 0.5rem 0 0;
-  min-width: 1.875rem;
+  padding: 0 0.75rem 0 0;
+  min-width: 2rem;
 }
 
 .editor-host .cm-activeLineGutter {
@@ -868,8 +884,23 @@ h1.doc-title {
 
 .ghost:hover {
   border-color: var(--line-strong);
-  background: var(--surface-hover);
+  background: var(--hover);
   color: var(--text);
+}
+
+.ghost:active {
+  background: var(--active);
+}
+
+.ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ghost:disabled:hover {
+  background: none;
+  border-color: var(--line);
+  color: var(--text-muted);
 }
 
 /* ------------------------------------------------------------------ dock -- */
@@ -1059,16 +1090,22 @@ h1.doc-title {
   white-space: nowrap;
   cursor: pointer;
   transition: background-color 150ms var(--ease),
-    border-color 150ms var(--ease);
+    border-color 150ms var(--ease), box-shadow 150ms var(--ease);
 }
 
 [data-slot="button"]:hover {
-  background: var(--surface-hover);
+  background: var(--hover);
   border-color: var(--line-strong);
 }
 
 [data-slot="button"]:active {
-  background: var(--surface-active);
+  background: var(--active);
+}
+
+[data-slot="button"]:focus-visible {
+  outline: none;
+  border-color: var(--ui-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 [data-slot="button"][disabled],
@@ -1117,9 +1154,9 @@ h1.doc-title {
 /* Border and ring, no offset halo: a 0-offset glow is decoration. */
 [data-slot="input"]:focus-visible,
 [data-slot="input-group"]:focus-within {
-  outline: 2px solid var(--ui-ring);
-  outline-offset: -1px;
-  border-color: var(--ui-ring-border);
+  outline: none;
+  border-color: var(--ui-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 [data-slot="input"]::placeholder {
@@ -1137,7 +1174,8 @@ h1.doc-title {
   padding: 0.1875rem;
   border: 0;
   border-radius: var(--radius-control);
-  background: var(--surface-sunken);
+  /* An alpha trough, because the panel behind it is already #fafafa. */
+  background: var(--hover);
 }
 
 [data-slot="tabs-list"][data-orientation="vertical"] {
@@ -1169,7 +1207,9 @@ h1.doc-title {
 [data-slot="tabs-tab"][aria-selected="true"] {
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 1px 2px light-dark(oklch(0 0 0 / 0.07), oklch(0 0 0 / 0.4));
+  box-shadow:
+    0 1px 2px light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.4)),
+    0 0 0 1px light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.06));
 }
 
 [data-slot="tabs-panel"] {
