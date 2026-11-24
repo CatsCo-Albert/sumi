@@ -48,8 +48,8 @@
   --text-sm: 0.8125rem; /* 13px — controls, labels */
   --text-base: 0.875rem; /* 14px — body, UI default */
   --text-md: 1rem; /* 16px — section titles */
-  --text-lg: 1.1875rem; /* 19px — page title */
-  --text-xl: 1.375rem; /* 22px — the one display moment */
+  --text-lg: 1.25rem; /* 20px */
+  --text-xl: 1.75rem; /* 28px — the document title */
 
   /* --- radii: pills for small controls, 12–14px for containers ---------- */
   --radius-control: 0.5rem;
@@ -57,17 +57,18 @@
   --radius-panel: 0.875rem;
 
   /* --- ui-sdk tokens ---------------------------------------------------- */
-  --ui-background: light-dark(#ffffff, #0a0a0a);
-  --ui-foreground: light-dark(#0a0a0a, #fafafa);
-  --ui-muted: light-dark(#f4f4f5, #1c1c1e);
-  --ui-muted-foreground: light-dark(#6b6b70, #a1a1a6);
-  --ui-border: light-dark(#e6e6e8, #262628);
+  /* Geist's scale: pure black on white, #666 for secondary, #eaeaea hairlines. */
+  --ui-background: light-dark(#ffffff, #000000);
+  --ui-foreground: light-dark(#000000, #ededed);
+  --ui-muted: light-dark(#fafafa, #111111);
+  --ui-muted-foreground: light-dark(#666666, #888888);
+  --ui-border: light-dark(#eaeaea, #1f1f1f);
   --ui-input: light-dark(oklch(0.855 0 0), oklch(0.375 0 0));
   --ui-primary: var(--ui-foreground);
   --ui-primary-foreground: var(--ui-background);
   --ui-destructive: light-dark(oklch(0.55 0.206 26), oklch(0.71 0.17 25));
-  --ui-ring: light-dark(oklch(0.62 0.12 254), oklch(0.72 0.13 254));
-  --ui-ring-border: light-dark(oklch(0.58 0.12 254), oklch(0.66 0.11 254));
+  --ui-ring: light-dark(#0070f3, #3291ff);
+  --ui-ring-border: light-dark(#0070f3, #3291ff);
   --ui-overlay: light-dark(oklch(1 0 0 / 0.7), oklch(0 0 0 / 0.7));
   --ui-shadow: 0 12px 32px -12px light-dark(oklch(0 0 0 / 0.18), oklch(0 0 0 / 0.6));
   --ui-radius: var(--radius-control);
@@ -83,21 +84,22 @@
   --ui-tree-indent: 0.875rem;
 
   /* --- surfaces: content brightest, chrome a second neutral layer -------- */
-  --surface: light-dark(#ffffff, #0a0a0a);
-  --surface-raised: light-dark(#fafafa, #111112);
-  --surface-sunken: light-dark(#f4f4f5, #060607);
-  --surface-hover: light-dark(#f2f2f3, #1c1c1e);
-  --surface-active: light-dark(#e8e8ea, #242427);
+  --surface: light-dark(#ffffff, #000000);
+  --surface-raised: light-dark(#fafafa, #0a0a0a);
+  --surface-sunken: light-dark(#fafafa, #000000);
+  --surface-hover: light-dark(#f2f2f2, #1a1a1a);
+  --surface-active: light-dark(#eaeaea, #262626);
 
   --line: var(--ui-border);
-  --line-strong: light-dark(#d4d4d8, #333336);
+  --line-strong: light-dark(#dcdcdc, #333333);
   --text: var(--ui-foreground);
   --text-muted: var(--ui-muted-foreground);
   /* Not a third grey: secondary text keeps body contrast so it stays legible
      at 11px, which is where a lighter tint would fall under 4.5:1. */
   --text-faint: var(--ui-muted-foreground);
-  --accent: light-dark(#0969da, #2f81f7);
-  --accent-tint: light-dark(#eaf3fd, #10243a);
+  /* Geist blue: the one chromatic voice, and only for interaction. */
+  --accent: light-dark(#0070f3, #3291ff);
+  --accent-tint: light-dark(#eef7ff, #0d2236);
   --danger: light-dark(#d1242f, #f85149);
   --tip: light-dark(#1a7f37, #3fb950);
   --warning: light-dark(#9a6700, #d29922);
@@ -140,7 +142,7 @@ button {
 /* Browser surfaces carry the design too. */
 ::selection {
   background: var(--accent-tint);
-  color: var(--text);
+  color: var(--accent);
 }
 
 * {
@@ -510,10 +512,11 @@ kbd {
   background: var(--surface-hover);
 }
 
-/* A flat tint, not an inset ring: a one-sided stripe or hairline frame around a
-   single row reads as an accidental border. */
+/* The selected row is the one place the accent appears in the file list —
+   Vercel's own dashboards mark the current item this way. */
 .tree-file[aria-current="true"] {
-  background: var(--surface-active);
+  background: var(--accent-tint);
+  color: var(--accent);
   font-weight: 500;
 }
 
@@ -556,7 +559,7 @@ h1.doc-title {
 }
 
 .doc-title {
-  font-size: 1.4375rem;
+  font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.04em;
   line-height: 1.2;
