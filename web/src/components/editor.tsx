@@ -214,6 +214,8 @@ export interface EditorProps {
   onSynced?: () => void;
   onPresence?: (count: number) => void;
   onText?: (text: string) => void;
+  /** Hands the live view out so the outline can jump and read the cursor. */
+  onReady?: (view: EditorView | null) => void;
 }
 
 /**
@@ -228,7 +230,7 @@ export function Editor(props: EditorProps) {
   let handle: EditorHandle | null = null;
 
   const teardown = () => {
-    if (handle) props.onReady?.(null as unknown as EditorView);
+    if (handle) props.onReady?.(null);
     handle?.destroy();
     handle = null;
   };

@@ -194,7 +194,10 @@ async function main() {
   await page.waitForTimeout(800);
 
   check("顶栏渲染", (await page.locator(".brand").count()) === 1);
-  check("项目出现在选择器", (await page.locator(".crumb-select option").count()) >= 1);
+  // ui-sdk's Select renders a trigger button, not a native <select>, so the
+  // project is asserted through the trigger's own text.
+  const crumb = await page.locator(".crumb-select").innerText().catch(() => "");
+  check("项目出现在选择器", crumb.includes("e2e 项目"), { crumb });
   check("文件树有该文件", (await page.locator(".tree-file").count()) >= 1);
   check("编辑器挂载", (await page.locator(".cm-content").count()) === 1);
   check("正文加载", (await page.locator(".cm-content").innerText()).includes("Sumi"));

@@ -5,6 +5,14 @@ import { Input } from "@ui-sdk/solid/input";
 import { Resizable, ResizableHandle, ResizablePanel } from "@ui-sdk/solid/resizable";
 import { ScrollArea, ScrollAreaViewport } from "@ui-sdk/solid/scroll-area";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@ui-sdk/solid/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectList,
+  SelectTrigger,
+  SelectValue,
+} from "@ui-sdk/solid/select";
 import { Editor } from "./editor";
 import { NameDialog } from "./shell";
 import { workspace } from "../lib/workspace";
@@ -60,13 +68,14 @@ function TreeRows(props: {
                 </span>
               }
             >
-              <button
+              <Button
+                data-variant="row"
                 class="tree-file"
                 aria-current={node.doc?.fileId === props.activeId ? "true" : undefined}
                 onClick={() => props.onOpen(node.doc!.fileId)}
               >
                 {node.name}
-              </button>
+              </Button>
             </Show>
           </div>
           <Show when={node.children.length > 0}>
@@ -108,7 +117,14 @@ export function WorkspaceView() {
   };
 
   const [paletteOpen, setPaletteOpen] = createSignal(false);
-  let paletteInput: HTMLInputElement | undefined;
+  /* ui-sdk's Input owns its element, so focus it by its own label rather than
+     through a ref the component does not forward. */
+  const focusPalette = () =>
+    queueMicrotask(() =>
+      globalThis.document
+        .querySelector<HTMLInputElement>(".palette-input")
+        ?.focus()
+    );
 
   /* ⌘K anywhere is the expected way into a command bar; Esc gets out. */
   const onKeyDown = (event: KeyboardEvent) => {
@@ -127,7 +143,7 @@ export function WorkspaceView() {
   createEffect(
     () => paletteOpen(),
     (open) => {
-      if (open) queueMicrotask(() => paletteInput?.focus());
+      if (open) focusPalette();
     }
   );
 
@@ -257,16 +273,24 @@ export function WorkspaceView() {
         <span class="brand">Sumi</span>
 
         <nav class="crumbs" aria-label="当前位置">
-          <select
-            class="crumb-select"
+          <Select
+            value={workspace.projectId() ?? null}
+            onValueChange={(value: string | null) => {
+              if (value) void workspace.selectProject(value);
+            }}
             aria-label="选择项目"
-            value={workspace.projectId() ?? ""}
-            onChange={(event) => void workspace.selectProject(event.currentTarget.value)}
           >
-            <For each={workspace.projects()}>
-              {(item) => <option value={item.id}>{item.name}</option>}
-            </For>
-          </select>
+            <SelectTrigger class="crumb-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectList>
+                <For each={workspace.projects()}>
+                  {(item) => <SelectItem value={item.id}>{item.name}</SelectItem>}
+                </For>
+              </SelectList>
+            </SelectContent>
+          </Select>
           <Show when={fileId()}>
             <span class="crumb-sep" aria-hidden="true">/</span>
             <span class="crumb-current" translate="no">
@@ -277,15 +301,15 @@ export function WorkspaceView() {
 
         <span class="spacer" />
 
-        <button
+        <Button
+          data-variant="trigger"
           class="cmd-trigger"
-          type="button"
           onClick={() => setPaletteOpen(true)}
           aria-keyshortcuts="Meta+K Control+K"
         >
           问 Agent
           <kbd>⌘K</kbd>
-        </button>
+        </Button>
 
         <span class="status" data-live={live()}>
           {live() ? "已连接" : "已断开"}
@@ -337,14 +361,14 @@ export function WorkspaceView() {
                 </ScrollAreaViewport>
               </ScrollArea>
               <div class="pane-foot">
-                <button
+                <Button
+                  data-variant="ghost"
                   class="pane-add"
-                  type="button"
                   disabled={!workspace.projectId() || !workspace.canEdit()}
                   onClick={() => setDialog("document")}
                 >
                   <span aria-hidden="true">+</span> 新建文档
-                </button>
+                </Button>
               </div>
             </nav>
           </ResizablePanel>
@@ -377,9 +401,9 @@ export function WorkspaceView() {
                       </Show>
                       <Show when={workspace.canEdit()}>
                         <span class="dot" aria-hidden="true">·</span>
-                        <button class="doc-action" type="button" onClick={() => void save()}>
+                        <Button data-variant="link" class="doc-action" onClick={() => void save()}>
                           保存
-                        </button>
+                        </Button>
                       </Show>
                     </div>
                   </div>
@@ -448,7 +472,8 @@ export function WorkspaceView() {
                         >
                           <For each={headings()}>
                             {(heading) => (
-                              <button
+                              <Button
+                                data-variant="row"
                                 class="outline-row"
                                 data-level={heading.level}
                                 style={{
@@ -458,7 +483,7 @@ export function WorkspaceView() {
                               >
                                 <span class="outline-text">{heading.text}</span>
                                 <span class="outline-line">{heading.line}</span>
-                              </button>
+                              </Button>
                             )}
                           </For>
                         </Show>
@@ -521,12 +546,13 @@ export function WorkspaceView() {
                                 <Button onClick={() => void workspace.resolveEdit(edit, "apply")}>
                                   应用
                                 </Button>
-                                <button
+                                <Button
+                                  data-variant="ghost"
                                   class="ghost"
                                   onClick={() => void workspace.resolveEdit(edit, "reject")}
                                 >
                                   驳回
-                                </button>
+                                </Button>
                               </div>
                             </div>
                           )}
@@ -556,7 +582,8 @@ export function WorkspaceView() {
                                 {version.authorName || "系统"} · {version.source} ·{" "}
                                 {Math.round(version.sizeBytes / 1024)} KB
                               </div>
-                              <button
+                              <Button
+                                data-variant="ghost"
                                 class="ghost"
                                 onClick={async () => {
                                   await server.restoreVersion(
@@ -568,7 +595,7 @@ export function WorkspaceView() {
                                 }}
                               >
                                 恢复
-                              </button>
+                              </Button>
                             </div>
                           )}
                         </For>
@@ -594,14 +621,15 @@ export function WorkspaceView() {
         >
           <div class="palette" role="dialog" aria-modal="true" aria-label="问 Agent">
             <div class="palette-row">
-              <input
-                ref={(element) => (paletteInput = element)}
+              <Input
                 class="palette-input"
                 aria-label="问 Agent"
                 placeholder="问 Agent：这段怎么改？"
                 value={question()}
-                onInput={(event) => setQuestion(event.currentTarget.value)}
-                onKeyDown={(event) => {
+                onInput={(event: Event) =>
+                  setQuestion((event.currentTarget as HTMLInputElement).value)
+                }
+                onKeyDown={(event: KeyboardEvent) => {
                   if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) void ask();
                 }}
               />
@@ -610,17 +638,17 @@ export function WorkspaceView() {
               </Button>
             </div>
             <div class="palette-foot">
-              <button class="ghost" type="button" onClick={() => setDialog("project")}>
+              <Button data-variant="ghost" class="ghost" onClick={() => setDialog("project")}>
                 新建项目
-              </button>
-              <button
+              </Button>
+              <Button
+                data-variant="ghost"
                 class="ghost"
-                type="button"
                 disabled={!workspace.projectId() || !workspace.canEdit()}
                 onClick={() => setDialog("document")}
               >
                 新建文档
-              </button>
+              </Button>
               <span class="spacer" />
               <span class="palette-hint"><kbd>Enter</kbd> 发送</span>
               <span class="palette-hint"><kbd>Esc</kbd> 关闭</span>
