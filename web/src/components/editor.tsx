@@ -60,6 +60,8 @@ export interface CollabOptions {
   onSynced?: () => void;
   onPresence?: (count: number) => void;
   onText?: (text: string) => void;
+  /** Hands the live view out so the outline can jump and read the cursor. */
+  onReady?: (view: EditorView) => void;
 }
 
 export interface EditorHandle {
@@ -193,6 +195,7 @@ export function Editor(props: EditorProps) {
   let handle: EditorHandle | null = null;
 
   const teardown = () => {
+    if (handle) props.onReady?.(null as unknown as EditorView);
     handle?.destroy();
     handle = null;
   };
@@ -214,6 +217,7 @@ export function Editor(props: EditorProps) {
         onPresence: (count) => props.onPresence?.(count),
         onText: (text) => props.onText?.(text),
       });
+      if (handle) props.onReady?.(handle.view);
     }
   );
 

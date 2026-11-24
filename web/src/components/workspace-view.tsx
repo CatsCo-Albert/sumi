@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal, createEffect, onCleanup } from "solid-js";
+import type { EditorView } from "@codemirror/view";
 import { Button } from "@ui-sdk/solid/button";
 import { Input } from "@ui-sdk/solid/input";
 import { Resizable, ResizableHandle, ResizablePanel } from "@ui-sdk/solid/resizable";
@@ -95,6 +96,17 @@ export function WorkspaceView() {
   const [question, setQuestion] = createSignal("");
   const [asking, setAsking] = createSignal(false);
   const [sidebarTab, setSidebarTab] = createSignal("outline");
+  const [view, setView] = createSignal<EditorView | null>(null);
+
+  /** The outline is navigation, not decoration: it moves the cursor. */
+  const jumpToLine = (line: number) => {
+    const editor = view();
+    if (!editor) return;
+    const target = Math.min(Math.max(line, 1), editor.state.doc.lines);
+    const pos = editor.state.doc.line(target).from;
+    editor.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    editor.focus();
+  };
 
   const actor = () => workspace.actor();
   const project = () => workspace.currentProject();
@@ -215,6 +227,9 @@ export function WorkspaceView() {
 
   return (
     <div class="app">
+      <a class="skip-link" href="#main">
+        跳到正文
+      </a>
       <header class="topbar">
         <span class="brand">Sumi</span>
 
@@ -305,12 +320,19 @@ export function WorkspaceView() {
                 fallback={<div class="empty-center">选择或新建一个文档开始</div>}
               >
                 <div class="doc-head">
-                  <div class="doc-title">{document()?.title || fileId()}</div>
+                  <h1 class="doc-title" translate="no">
+                    {document()?.title || fileId()}
+                  </h1>
                   <div class="doc-meta">
-                    {fileId()}
+                    <span translate="no">{fileId()}</span>
                     <Show when={document()?.updatedAt}>
                       <span class="dot">·</span>
-                      {new Date(document()!.updatedAt).toLocaleString()}
+                      {new Intl.DateTimeFormat("zh-CN", {
+                        month: "numeric",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }).format(document()!.updatedAt)}
                     </Show>
                   </div>
                 </div>
@@ -335,15 +357,18 @@ export function WorkspaceView() {
                     onSynced={() => setSynced(true)}
                     onPresence={setPresence}
                     onText={setDocText}
+                    onReady={setView}
                   />
                   <div class="editor-foot">
-                    <span>{synced() ? "已同步" : "同步中"}</span>
-                    <span class="dot">·</span>
+                    <span class="foot-state" data-synced={synced()}>
+                      {synced() ? "已同步" : "同步中…"}
+                    </span>
+                    <span class="foot-sep" aria-hidden="true" />
                     <span>{wordCount()} 词</span>
-                    <span class="dot">·</span>
-                    <span>{docText().length} 字符</span>
+                    <span class="foot-sep" aria-hidden="true" />
+                    <span>{docText().length} 字</span>
                     <span class="spacer" />
-                    <span>Ctrl/⌘+S 保存</span>
+                    <span class="foot-hint">⌘S 保存</span>
                   </div>
                 </Show>
               </Show>
@@ -375,12 +400,17 @@ export function WorkspaceView() {
                         >
                           <For each={headings()}>
                             {(heading) => (
-                              <div
+                              <button
                                 class="outline-row"
-                                style={{ "padding-left": `${8 + (heading.level - 1) * 12}px` }}
+                                data-level={heading.level}
+                                style={{
+                                  "padding-left": `${0.5 + (heading.level - 1) * 0.75}rem`,
+                                }}
+                                onClick={() => jumpToLine(heading.line)}
                               >
-                                {heading.text}
-                              </div>
+                                <span class="outline-text">{heading.text}</span>
+                                <span class="outline-line">{heading.line}</span>
+                              </button>
                             )}
                           </For>
                         </Show>

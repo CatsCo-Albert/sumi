@@ -417,11 +417,16 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
+h1.doc-title {
+  margin: 0;
+}
+
 .doc-title {
-  font-size: 1.375rem;
+  font-size: 1.4375rem;
   font-weight: 600;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.04em;
   line-height: 1.2;
+  text-wrap: balance;
 }
 
 .doc-meta {
@@ -462,16 +467,16 @@ button {
 .editor-host .cm-content {
   max-width: var(--measure);
   margin-inline: auto;
-  padding: 0.875rem 1.5rem 6rem 0;
+  padding: 0.875rem 1.5rem 6rem 0.875rem;
 }
 
 .editor-host .cm-gutters {
   background: var(--surface);
   border-right: 0;
   color: var(--text-muted);
-  font-size: var(--text-2xs);
-  padding-left: 0.5rem;
-  min-width: 2.75rem;
+  font-size: 0.6875rem;
+  padding: 0 0.5rem 0 0;
+  min-width: 1.875rem;
 }
 
 .editor-host .cm-activeLineGutter {
@@ -493,12 +498,44 @@ button {
   padding: 0.3125rem var(--gutter);
   border-top: 1px solid var(--line);
   background: var(--surface-raised);
+  gap: 0.5rem;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
   flex: 0 0 auto;
+}
+
+.foot-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  color: var(--text);
+}
+
+.foot-state::before {
+  content: "";
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 999px;
+  background: var(--warning);
+  transition: background-color 200ms var(--ease);
+}
+
+.foot-state[data-synced="true"]::before {
+  background: var(--tip);
+}
+
+.foot-sep {
+  width: 1px;
+  height: 0.625rem;
+  background: var(--line-strong);
+}
+
+.foot-hint {
+  color: var(--text-muted);
+  opacity: 0.75;
 }
 
 /* ---------------------------------------------------------------- panels -- */
@@ -509,22 +546,69 @@ button {
   flex-direction: column;
 }
 
+/* The outline is navigation: each row moves the cursor, and shows its line
+   number on hover so the destination is not a surprise. */
 .outline-row {
-  padding: 0.4375rem 0.625rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.3125rem 0.5rem;
+  border: 0;
   border-radius: var(--radius-control);
+  background: none;
+  font-family: inherit;
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: default;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
   transition: background-color 150ms var(--ease), color 150ms var(--ease);
 }
 
 .outline-row:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+.outline-row:active {
+  background: var(--surface-active);
+}
+
+.outline-row[data-level="1"] {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.outline-row[data-level="4"],
+.outline-row[data-level="5"],
+.outline-row[data-level="6"] {
+  font-size: var(--text-xs);
+}
+
+.outline-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-line {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  opacity: 0.45;
+  transition: opacity 150ms var(--ease);
+}
+
+.outline-row:hover .outline-line,
+.outline-row:focus-visible .outline-line {
+  opacity: 1;
 }
 
 .members,
@@ -994,4 +1078,55 @@ button {
 
 [data-slot="scroll-area-thumb"]:hover {
   background: var(--text-muted);
+}
+
+/* ------------------------------------------------------------ a11y floor -- */
+
+/* Reachable by keyboard before anything else, hidden until focused. */
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-control);
+  background: var(--text);
+  color: var(--surface);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform 150ms var(--ease);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* A pointer that taps should not wait 300ms to find out it was a tap. */
+button,
+[role="button"],
+[data-slot="button"],
+[data-slot="tabs-tab"],
+.tree-file,
+.outline-row {
+  touch-action: manipulation;
+}
+
+/* Panels scroll on their own; the page behind them must not chain. */
+.pane,
+.editor-host,
+[data-slot="scroll-area-viewport"] {
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
