@@ -145,7 +145,11 @@ export function mountEditor(host: HTMLElement, options: CollabOptions): EditorHa
   const view = new EditorView({
     parent: host,
     state: EditorState.create({
-      doc: ytext.length === 0 ? options.initialContent : "",
+      // Always empty: yCollab fills it from `ytext` on the first sync. Seeding
+      // the editor *and* letting the server's content arrive would insert both,
+      // and Yjs keeps concurrent inserts at the same position rather than
+      // choosing between them — which is how a document doubles on open.
+      doc: "",
       extensions: [...extensionsFor(options.mode, options.readOnly), yCollab(ytext, provider.awareness)],
     }),
   });

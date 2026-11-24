@@ -205,8 +205,16 @@ button {
 .workspace {
   flex: 1;
   min-height: 0;
-  padding: 0.5rem;
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ui-sdk lays the panels out itself; it only needs to be told to fill. */
+[data-slot="resizable"] {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* ---------------------------------------------------------------- panes -- */
@@ -215,14 +223,13 @@ button {
   height: 100%;
   overflow: hidden;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
 }
 
 .pane-docs {
   display: flex;
   flex-direction: column;
   background: var(--surface-raised);
+  border-right: 1px solid var(--line);
 }
 
 .pane-head {
@@ -240,6 +247,7 @@ button {
   display: flex;
   flex-direction: column;
   background: var(--surface-raised);
+  border-left: 1px solid var(--line);
 }
 
 .pane-side > * {
@@ -348,7 +356,11 @@ button {
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   line-height: 1.7;
-  padding: 0.5rem 0;
+  padding: 0.75rem 0;
+}
+
+.editor-host .cm-content {
+  padding: 0 1.25rem 3rem 0.5rem;
 }
 
 .editor-host .cm-gutters {
@@ -529,7 +541,7 @@ button {
   display: flex;
   gap: 0.375rem;
   align-items: center;
-  padding: 0.5rem var(--gutter);
+  padding: 0.4375rem var(--gutter);
   border-top: 1px solid var(--line);
   background: var(--surface);
   flex: 0 0 auto;
@@ -622,4 +634,245 @@ button {
   gap: 0.375rem;
   justify-content: flex-end;
   margin-top: 0.375rem;
+}
+/* ==========================================================================
+ * ui-sdk parts, redrawn to coss ui's specifications.
+ *
+ * ui-sdk ships its own default look in `@layer ui-sdk` — a thin, boxy one. These
+ * rules sit outside any layer, so they win, and each block below follows the
+ * measurements from coss ui's registry source: control heights, radii, borders
+ * and the muted hover it uses. The behaviour underneath (focus, keyboard, ARIA)
+ * is untouched, which is the point: same components, coss appearance.
+ * ========================================================================== */
+
+/* --- button: 36px tall, 32px from sm up, 10px radius, hairline border ----- */
+
+[data-slot="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  height: 2.25rem;
+  padding-inline: 0.6875rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
+  transition: background-color 120ms ease, border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+[data-slot="button"]:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+
+[data-slot="button"]:active {
+  background: var(--surface-active);
+  box-shadow: none;
+}
+
+[data-slot="button"][disabled],
+[data-slot="button"][aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+[data-slot="button"] svg {
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.8;
+}
+
+@media (min-width: 40rem) {
+  [data-slot="button"] {
+    height: 2rem;
+    font-size: 0.8125rem;
+  }
+}
+
+/* --- input: 34px tall, same radius and hairline ------------------------- */
+
+[data-slot="input"],
+[data-slot="input-group"] {
+  height: 2.125rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding-inline: 0.6875rem;
+  font-size: 0.875rem;
+  color: var(--text);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+[data-slot="input"]:hover,
+[data-slot="input-group"]:hover {
+  border-color: var(--line-strong);
+}
+
+[data-slot="input"]:focus-visible,
+[data-slot="input-group"]:focus-within {
+  outline: none;
+  border-color: var(--ui-ring-border);
+  box-shadow: 0 0 0 3px oklch(from var(--ui-ring) l c h / 0.18);
+}
+
+[data-slot="input"]::placeholder {
+  color: var(--text-faint);
+}
+
+/* --- tabs: a pill-shaped trough with a raised selected tab --------------- */
+
+[data-slot="tabs-list"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  padding: 0.125rem;
+  margin: 0.375rem 0.375rem 0;
+  align-self: flex-start;
+}
+
+[data-slot="tabs-list"][data-orientation="vertical"] {
+  flex-direction: column;
+  align-items: stretch;
+  border-inline-end: 0;
+}
+
+[data-slot="tabs-tab"] {
+  height: 1.75rem;
+  padding-inline: 0.5625rem;
+  margin: 0;
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 3px);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+[data-slot="tabs-tab"]:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+[data-slot="tabs-tab"][data-state="active"],
+[data-slot="tabs-tab"][aria-selected="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.06),
+    inset 0 0 0 1px var(--line);
+}
+
+[data-slot="tabs-panel"] {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.25rem;
+}
+
+/* --- dialog: 16px radius, roomy padding, blurred backdrop ---------------- */
+
+[data-slot="dialog-backdrop"] {
+  background: oklch(0 0 0 / 0.32);
+  backdrop-filter: blur(4px);
+}
+
+[data-slot="dialog-content"] {
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius-xl) + 4px);
+  background: var(--surface);
+  box-shadow: 0 24px 48px -12px oklch(0 0 0 / 0.35);
+  padding: 1.5rem;
+  min-width: 22rem;
+}
+
+[data-slot="dialog-title"] {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+[data-slot="dialog-description"] {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-top: 0.125rem;
+}
+
+/* --- toolbar: compact, borderless until hovered ------------------------- */
+
+[data-slot="toolbar"] {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+[data-slot="toolbar-button"] {
+  height: 1.875rem;
+  padding-inline: 0.5rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-lg) - 3px);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+[data-slot="toolbar-button"]:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+[data-slot="toolbar-button"][disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+[data-slot="toolbar-separator"] {
+  width: 1px;
+  height: 1rem;
+  margin-inline: 0.25rem;
+  background: var(--line);
+}
+
+/* --- resizable: a hairline that thickens on hover ----------------------- */
+
+[data-slot="resizable-handle"] {
+  width: 1px;
+  background: var(--line);
+  transition: background-color 140ms ease, width 140ms ease;
+}
+
+[data-slot="resizable-handle"]:hover,
+[data-slot="resizable-handle"]:focus-visible {
+  width: 2px;
+  background: var(--ui-ring-border);
+}
+
+/* --- scroll area: a slim thumb that only shows on hover ----------------- */
+
+[data-slot="scroll-area-thumb"] {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+[data-slot="scroll-area-thumb"]:hover {
+  background: var(--text-faint);
 }
