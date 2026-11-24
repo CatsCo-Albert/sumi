@@ -14,7 +14,7 @@ import {
   addRelPosToEdit,
   type PendingEdit,
 } from "../src/server/edit-position-tracker";
-import { validateUiPatch, validateJsonRender } from "../src/a2ui/validate";
+import { validateUiPatch } from "../src/a2ui/validate";
 import {
   publishUiPatch,
   subscribeUiEvents,
@@ -126,16 +126,6 @@ describe("A2UI validate", () => {
   it("rejects unknown patch kinds", () => {
     expect(validateUiPatch({ type: "fly_to_moon" })).toBeNull();
     expect(validateUiPatch({ type: "set_panel_size", panel: "ai", widthPercent: 200 })).toBeNull();
-  });
-  it("accepts json-render payloads", () => {
-    expect(
-      validateJsonRender({
-        kind: "progress",
-        runId: "r1",
-        status: "running",
-        progress: 0.4,
-      })
-    ).not.toBeNull();
   });
 });
 

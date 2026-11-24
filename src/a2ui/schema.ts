@@ -131,77 +131,18 @@ export type UiPatch =
       fileId: string;
       versionId: string;
     }
-  | { type: "noop" };
-
-// ---------------------------------------------------------------------------
-// Rich render payloads — the "agent generated a card" branch
-// ---------------------------------------------------------------------------
-
-export interface RenderAction {
-  type:
-    | "open_document"
-    | "queue_prompt"
-    | "open_url"
-    | "run_command";
-  label: string;
-  /** open_document */
-  documentId?: string;
-  /** queue_prompt */
-  prompt?: string;
-  autoSend?: boolean;
-  /** open_url */
-  url?: string;
-  /** run_command */
-  command?: string;
-  variant?: "default" | "secondary" | "outline" | "destructive";
-  confirmTitle?: string;
-  confirmDescription?: string;
-}
-
-export interface DocumentCard {
-  id: string;
-  name: string;
-  description?: string | null;
-  updatedAt?: string;
-  mainFile?: string;
-  actions?: RenderAction[];
-}
-
-export type JsonRenderPayload =
   | {
-      kind: "document_cards";
-      title?: string;
-      subtitle?: string;
-      documents: DocumentCard[];
-      emptyMessage?: string;
-    }
-  | {
-      kind: "progress";
-      runId: string;
-      status: "queued" | "running" | "completed" | "error";
-      progress: number; // 0..1
-      stage?: string;
-      message?: string;
-    }
-  | {
-      kind: "report";
-      runId: string;
-      title: string;
-      summary: string;
-      bodyMarkdown: string;
-      error?: string;
-    }
-  | {
-      kind: "status";
+      /**
+       * A request for the open page to run one ui-sdk agent call.
+       *
+       * `@ui-sdk/core/agent` lives in the browser, so an agent talking to Sumi
+       * over HTTP cannot call it directly. The request travels out on this bus,
+       * the page answers by POSTing to /api/agent/result, and the HTTP response
+       * that started it stays open until the answer arrives.
+       */
+      type: "agent_call";
       requestId: string;
-      status: "running" | "success" | "error";
-      action?: { type: "open_full_preview" };
-    };
-
-// ---------------------------------------------------------------------------
-// Node schema — top-level A2UI tree. Keep it tiny.
-// ---------------------------------------------------------------------------
-
-export type WorkspaceNode =
-  | { component_name: "omni_chat"; props: Record<string, never> }
-  | { component_name: "editor_core"; props: { documentId: string } };
+      call: "snapshot" | "query" | "act";
+      input: unknown;
+    }
+  | { type: "noop" };

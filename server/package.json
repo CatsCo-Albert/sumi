@@ -1,0 +1,20 @@
+{
+  "name": "@sumi/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "hono": "^4.13.21"
+  },
+  "devDependencies": {
+    "jose": "^6.2.18",
+    "playwright-core": "^1.65.1",
+    "tsx": "^4.21.0",
+    "typescript": "~5.9.3"
+  }
+}

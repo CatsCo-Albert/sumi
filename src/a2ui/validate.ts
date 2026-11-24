@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import type { UiPatch, JsonRenderPayload } from "./schema";
+import type { UiPatch } from "./schema";
 
 const uiPatchSchema = z.union([
   z.object({ type: z.literal("open_document"), documentId: z.string().min(1) }),
@@ -86,71 +86,16 @@ const uiPatchSchema = z.union([
     fileId: z.string().min(1),
     versionId: z.string().min(1),
   }),
+  z.object({
+    type: z.literal("agent_call"),
+    requestId: z.string().min(1),
+    call: z.enum(["snapshot", "query", "act"]),
+    input: z.unknown(),
+  }),
   z.object({ type: z.literal("noop") }),
 ]);
 
 export function validateUiPatch(input: unknown): UiPatch | null {
   const r = uiPatchSchema.safeParse(input);
   return r.success ? (r.data as UiPatch) : null;
-}
-
-// ---------------------------------------------------------------------------
-
-const actionSchema = z.object({
-  type: z.enum(["open_document", "queue_prompt", "open_url", "run_command"]),
-  label: z.string().min(1),
-  documentId: z.string().optional(),
-  prompt: z.string().optional(),
-  autoSend: z.boolean().optional(),
-  url: z.string().optional(),
-  command: z.string().optional(),
-  variant: z.enum(["default", "secondary", "outline", "destructive"]).optional(),
-  confirmTitle: z.string().optional(),
-  confirmDescription: z.string().optional(),
-});
-
-const documentCardSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().nullable().optional(),
-  updatedAt: z.string().optional(),
-  mainFile: z.string().optional(),
-  actions: z.array(actionSchema).optional(),
-});
-
-const jsonRenderSchema = z.union([
-  z.object({
-    kind: z.literal("document_cards"),
-    title: z.string().optional(),
-    subtitle: z.string().optional(),
-    documents: z.array(documentCardSchema),
-    emptyMessage: z.string().optional(),
-  }),
-  z.object({
-    kind: z.literal("progress"),
-    runId: z.string().min(1),
-    status: z.enum(["queued", "running", "completed", "error"]),
-    progress: z.number().min(0).max(1),
-    stage: z.string().optional(),
-    message: z.string().optional(),
-  }),
-  z.object({
-    kind: z.literal("report"),
-    runId: z.string().min(1),
-    title: z.string().min(1),
-    summary: z.string(),
-    bodyMarkdown: z.string(),
-    error: z.string().optional(),
-  }),
-  z.object({
-    kind: z.literal("status"),
-    requestId: z.string().min(1),
-    status: z.enum(["running", "success", "error"]),
-    action: z.object({ type: z.literal("open_full_preview") }).optional(),
-  }),
-]);
-
-export function validateJsonRender(input: unknown): JsonRenderPayload | null {
-  const r = jsonRenderSchema.safeParse(input);
-  return r.success ? (r.data as JsonRenderPayload) : null;
 }

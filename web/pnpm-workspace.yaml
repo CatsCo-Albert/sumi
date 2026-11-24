@@ -1,0 +1,7 @@
+packages:
+  - .
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@ui-sdk/core@0.1.0-beta.16'
+  - '@ui-sdk/solid@0.1.0-beta.16'
