@@ -192,8 +192,11 @@ function buildServer(deps: McpDeps, actor: Actor, request: Request) {
           ...(projectId ? { projectId } : {}),
           ...(filePath ? { filePath } : {}),
         };
+        // An empty list alone is ambiguous: it can mean "never read" or "no page
+        // was open to read". Report the pages so the two can be told apart.
         return text({
           summary: markSummary(query),
+          pagesOpen: listPages(actor.id, projectId || undefined).length,
           marks: listMarks({ ...query, limit }),
         });
       }
