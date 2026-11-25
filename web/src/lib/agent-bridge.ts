@@ -12,7 +12,16 @@
  */
 
 import { createAgent, type AgentStep } from "@ui-sdk/core/agent";
-import { markChanged, markRead } from "./agent-marks";
+import {
+  beginActivity,
+  clearBusy,
+  endActivity,
+  finishActivity,
+  markBusy,
+  markChanged,
+  markRead,
+  updateActivity,
+} from "./agent-marks";
 
 const agent = createAgent({
   // A step the page marked for a person still runs, because the human is not
@@ -37,12 +46,21 @@ export async function runAgentCall(
   body: AgentRequestBody,
   post: (payload: Record<string, unknown>) => Promise<unknown>
 ): Promise<void> {
+  // Say what it is doing while it does it: a call that reads forty components
+  // otherwise looks identical to a page where nothing is happening.
+  beginActivity(
+    body.call,
+    body.call === "act" ? "准备操作" : body.call === "query" ? "查找组件" : "读取页面"
+  );
+
+  // Declared outside the try so the finally block can report the outcome.
+  let marks: Array<{ kind: "read" | "changed" }> = [];
+
   try {
     let value: unknown;
     // Marks travel with the answer: the page is the only place that knows what
     // it actually read, and a record the agent writes about itself could not
     // tell "read nothing" apart from "read and reported nothing".
-    let marks: unknown[] = [];
     if (body.call === "snapshot") {
       value = agent.snapshot();
       marks = markRead(value, "snapshot");
@@ -52,6 +70,14 @@ export async function runAgentCall(
     } else {
       const input = (body.input ?? {}) as { steps?: AgentStep[] };
       const steps = Array.isArray(input.steps) ? input.steps : [];
+      // Paint the targets before running them: the step completes in one tick,
+      // so a highlight added afterwards would only ever be seen as the result.
+      markBusy(steps);
+      updateActivity(
+        steps.length > 0
+          ? `操作 ${steps.map((step) => step.action ?? "step").join(", ")}`
+          : "操作页面"
+      );
       try {
         value = await agent.act({ steps });
         marks = markChanged(steps, value);
@@ -59,6 +85,8 @@ export async function runAgentCall(
         // A refused or failed step still names what was attempted.
         marks = markChanged(steps, { steps: [] });
         throw error;
+      } finally {
+        clearBusy(steps);
       }
     }
     await post({ requestId: body.requestId, ok: true, value, marks });
@@ -68,6 +96,19 @@ export async function runAgentCall(
       ok: false,
       error: (error as Error)?.message ?? String(error),
     });
+  } finally {
+    // Report the outcome briefly: a completed read is otherwise invisible.
+    if (marks.length > 0) {
+      const reads = marks.filter((mark) => mark.kind === "read").length;
+      const changed = marks.length - reads;
+      finishActivity(
+        changed > 0
+          ? `改了 ${changed} 处${reads > 0 ? `，读了 ${reads} 项` : ""}`
+          : `读了 ${reads} 项`
+      );
+    } else {
+      endActivity();
+    }
   }
 }
 

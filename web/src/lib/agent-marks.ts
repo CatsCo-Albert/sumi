@@ -36,6 +36,88 @@ const [marks, setMarks] = createSignal<AgentMark[]>([]);
 /** Newest first. */
 export const agentMarks = marks;
 
+/**
+ * What the agent is doing right now, or null.
+ *
+ * Marks answer "what happened"; this answers "what is happening". Without it the
+ * page is still for the duration of a call, and a call that reads forty
+ * components looks exactly like a page where nothing is going on.
+ */
+export interface AgentActivity {
+  call: "snapshot" | "query" | "act";
+  /** A short human phrase: what it is reading, or the step it is running. */
+  detail: string;
+  at: number;
+  /** True once the call has finished, so the chip can report instead of spin. */
+  done?: boolean;
+}
+
+const [activity, setActivity] = createSignal<AgentActivity | null>(null);
+
+export const agentActivity = activity;
+
+export function beginActivity(call: AgentActivity["call"], detail: string): void {
+  setActivity({ call, detail, at: Date.now() });
+}
+
+export function updateActivity(detail: string): void {
+  setActivity((current) => (current ? { ...current, detail, at: Date.now() } : current));
+}
+
+/**
+ * Report what just finished, for a few seconds.
+ *
+ * A read completes in milliseconds — clearing the chip immediately means nobody
+ * ever sees it, and the work stays invisible. Reporting the outcome for a moment
+ * is what turns "something happened" into something a person can notice.
+ */
+export function finishActivity(detail: string, ttlMs = 3200): void {
+  const entry: AgentActivity = { call: "snapshot", detail, at: Date.now(), done: true };
+  setActivity(entry);
+  // Only clear this exact entry. Checking `done` instead would let an earlier
+  // call's timer wipe a later call's result — the second action looks like it
+  // did nothing.
+  window.setTimeout(() => {
+    setActivity((current) => (current === entry ? null : current));
+  }, ttlMs);
+}
+
+export function endActivity(): void {
+  setActivity(null);
+}
+
+/**
+ * Mark what is about to be operated, before it is.
+ *
+ * The step runs in one tick, so a highlight painted afterwards would only ever
+ * be seen as the result. Painting first is what makes "the agent is pressing
+ * this" visible while it happens.
+ */
+export function markBusy(steps: Array<{ ref?: unknown; action?: unknown }>): void {
+  for (const step of steps) {
+    if (typeof step?.ref !== "string") continue;
+    try {
+      const element = elementOf(step.ref);
+      if (!element) continue;
+      element.dataset.agentBusy = typeof step.action === "string" ? step.action : "act";
+    } catch {
+      // A ref that no longer resolves is normal after a re-render.
+    }
+  }
+}
+
+export function clearBusy(steps: Array<{ ref?: unknown }>): void {
+  for (const step of steps) {
+    if (typeof step?.ref !== "string") continue;
+    try {
+      const element = elementOf(step.ref);
+      if (element) delete element.dataset.agentBusy;
+    } catch {
+      // Already gone.
+    }
+  }
+}
+
 export function clearAgentMarks(): void {
   for (const mark of marks()) {
     clearElementMark(mark.ref);

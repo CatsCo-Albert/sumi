@@ -18,7 +18,7 @@ import { NameDialog } from "./shell";
 import { workspace } from "../lib/workspace";
 import { navigateTo, currentRoute } from "../lib/route";
 import { announcePage, connectUiEvents } from "../lib/ui-events";
-import { agentMarks, clearAgentMarks } from "../lib/agent-marks";
+import { agentActivity, agentMarks, clearAgentMarks } from "../lib/agent-marks";
 import { server, readToken, BASE_PATH, type PendingEdit, type VersionSummary } from "../lib/api";
 import { buildFileTree, filterTree, type TreeNode } from "../lib/file-tree";
 import { extractHeadings } from "../lib/outline";
@@ -321,6 +321,17 @@ export function WorkspaceView() {
         </nav>
 
         <span class="spacer" />
+
+        {/* What the agent is doing right now, next to where you are. A call that
+            reads forty components should not look like an idle page. */}
+        <Show when={agentActivity()}>
+          {(act) => (
+            <span class="agent-activity" data-call={act().call} role="status" aria-live="polite">
+              <span class="agent-activity-dot" aria-hidden="true" />
+              Agent {act().detail}…
+            </span>
+          )}
+        </Show>
 
         <Button
           data-variant="trigger"
