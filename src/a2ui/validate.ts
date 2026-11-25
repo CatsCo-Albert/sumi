@@ -91,6 +91,7 @@ const uiPatchSchema = z.union([
     requestId: z.string().min(1),
     call: z.enum(["snapshot", "query", "act"]),
     input: z.unknown(),
+    targetClientId: z.string().min(1).optional(),
   }),
   z.object({ type: z.literal("noop") }),
 ]);

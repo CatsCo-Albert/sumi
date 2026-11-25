@@ -3,14 +3,19 @@
  *
  * `POST /api/agent/result` — the page reports what a ui-sdk agent call returned.
  *
- * The request id in the body is the one the page received over SSE, so the
- * answer is matched to the HTTP call still waiting on it. An id nobody waits on
- * is answered 204: a second tab replying to the same request, or a reply that
- * lost the race with the timeout, is expected rather than an error.
+ * The request id is the one the page received over SSE, and `clientId` is the
+ * page's own identity: together they say which page answered. Without the
+ * second half, an aggregated read could not tell three answers apart and an
+ * addressed write could not be checked against the page it was meant for.
+ *
+ * An id nobody waits on is answered 204 either way: a second tab replying to the
+ * same request, a page the call did not address, or a reply that lost the race
+ * with the timeout are all expected rather than errors.
  */
 
 import { actorFromRequest } from "@/lib/http-auth";
 import { settleAgentCall } from "@/src/ui-bus/agent-bridge";
+import { touchPage } from "@/src/ui-bus/page-registry";
 
 export async function POST(request: Request) {
   const actor = await actorFromRequest(request);
@@ -20,6 +25,9 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as {
     requestId?: string;
+    clientId?: string;
+    projectId?: string;
+    filePath?: string | null;
     ok?: boolean;
     value?: unknown;
     error?: string;
@@ -32,13 +40,28 @@ export async function POST(request: Request) {
     );
   }
 
-  const settled = settleAgentCall(
+  const clientId = (body.clientId ?? "").trim();
+  if (!clientId) {
+    // A page that does not identify itself cannot be addressed, and answering
+    // for it would quietly reintroduce "whichever replied first".
+    return Response.json({ error: "clientId required" }, { status: 400 });
+  }
+
+  if (body.projectId) {
+    touchPage(actor.id, clientId, {
+      projectId: body.projectId,
+      ...(body.filePath !== undefined ? { filePath: body.filePath } : {}),
+    });
+  }
+
+  settleAgentCall(
     body.requestId,
+    clientId,
     body.ok
       ? { ok: true, value: body.value ?? null }
       : { ok: false, error: body.error ?? "agent call failed" },
-    actor.id
+    body.filePath ?? null
   );
 
-  return new Response(null, { status: settled ? 204 : 204 });
+  return new Response(null, { status: 204 });
 }

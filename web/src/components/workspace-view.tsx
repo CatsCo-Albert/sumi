@@ -17,7 +17,7 @@ import { Editor } from "./editor";
 import { NameDialog } from "./shell";
 import { workspace } from "../lib/workspace";
 import { navigateTo, currentRoute } from "../lib/route";
-import { connectUiEvents } from "../lib/ui-events";
+import { announcePage, connectUiEvents } from "../lib/ui-events";
 import { server, readToken, BASE_PATH, type PendingEdit, type VersionSummary } from "../lib/api";
 import { buildFileTree, filterTree, type TreeNode } from "../lib/file-tree";
 import { extractHeadings } from "../lib/outline";
@@ -193,6 +193,20 @@ export function WorkspaceView() {
     }
   );
 
+  /**
+   * Keep the server's page entry on the current document.
+   *
+   * Without this the entry keeps whatever document the SSE stream was opened
+   * with, and a tab that started on the project list stays anonymous forever —
+   * addressable, but impossible to tell apart from another tab by what it shows.
+   */
+  createEffect(
+    () => [workspace.projectId(), fileId()] as const,
+    ([projectId, target]) => {
+      void announcePage(projectId, target);
+    }
+  );
+
   /** The URL follows the selection, so a document stays linkable. */
   createEffect(
     () => [workspace.projectId(), fileId()] as const,
@@ -212,7 +226,9 @@ export function WorkspaceView() {
       stopStream?.();
       stopStream = null;
       if (!projectId) return;
-      stopStream = connectUiEvents(projectId, {
+      stopStream = connectUiEvents(
+        projectId,
+        {
         onStatus: (state) => setLive(state === "open"),
         onPatch: (patch) => {
           if (patch.type === "open_document" && typeof patch.documentId === "string") {
@@ -222,10 +238,14 @@ export function WorkspaceView() {
             setSidebarTab(patch.tab);
           }
         },
-        onPendingEdit: (edit: PendingEdit | null) => {
-          if (edit) void workspace.loadEdits();
+          onPendingEdit: (edit: PendingEdit | null) => {
+            if (edit) void workspace.loadEdits();
+          },
         },
-      });
+        // The document this tab is on, so the page can be named by what it shows
+        // rather than only by an opaque id.
+        { getFilePath: fileId }
+      );
     }
   );
   onCleanup(() => stopStream?.());

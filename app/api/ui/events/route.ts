@@ -10,6 +10,7 @@
 
 import { listUiEvents, subscribeUiEvents } from "@/src/ui-bus/event-bus";
 import { actorFromRequest } from "@/lib/http-auth";
+import { registerPage, touchPage } from "@/src/ui-bus/page-registry";
 
 const HEARTBEAT_MS = 20_000;
 const POLL_MS = 1_000;
@@ -37,10 +38,25 @@ export async function GET(request: Request) {
   const userId = actor.id;
   const url = new URL(request.url);
   const projectFilter = url.searchParams.get("projectId") || "";
+  /**
+   * The page's own id, so a call can address this one page and an answer can say
+   * which page it came from.
+   *
+   * This is routing, not presence: presence is the Yjs room's awareness (who is
+   * connected to the document), and a page that is only sitting on the project
+   * list is a valid target for routing while not being "in" any document. The
+   * two must not be conflated, so this registry is deliberately separate.
+   */
+  const clientId = (url.searchParams.get("clientId") || "").trim();
+  const filePath = url.searchParams.get("filePath") || null;
 
   // SSE resume: on reconnect the client sends the id of the last event it
   // saw; we replay everything persisted after it instead of a blind tail.
   const lastEventId = request.headers.get("last-event-id") || "";
+
+  const unregisterPage = clientId
+    ? registerPage({ userId, clientId, projectId: projectFilter || null, filePath })
+    : null;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -123,6 +139,9 @@ export async function GET(request: Request) {
       }, POLL_MS);
 
       const heartbeat = setInterval(() => {
+        // Refreshes the routing entry as a side effect of the stream being
+        // alive; it does not invent presence, it only keeps a page reachable.
+        if (clientId) touchPage(userId, clientId);
         enqueue(sseFrame("ping", { timestamp: Date.now() }));
       }, HEARTBEAT_MS);
 
@@ -132,6 +151,7 @@ export async function GET(request: Request) {
         clearInterval(heartbeat);
         clearInterval(poll);
         unsubscribe();
+        unregisterPage?.();
         try {
           controller.close();
         } catch { /* already closed */ }

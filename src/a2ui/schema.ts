@@ -144,5 +144,11 @@ export type UiPatch =
       requestId: string;
       call: "snapshot" | "query" | "act";
       input: unknown;
+      /**
+       * When set, only the page with this id runs the call. Absent means every
+       * open page runs it, which is how an aggregated read collects answers
+       * from more than one tab.
+       */
+      targetClientId?: string;
     }
   | { type: "noop" };

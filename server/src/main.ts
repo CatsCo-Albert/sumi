@@ -64,6 +64,7 @@ const routeTable: Array<{ path: string; module: string }> = [
   { path: "/api/shadow-docs/promote", module: "../../app/api/shadow-docs/promote/route.ts" },
   { path: "/api/tap", module: "../../app/api/tap/route.ts" },
   { path: "/api/ui/events", module: "../../app/api/ui/events/route.ts" },
+  { path: "/api/ui/page", module: "../../app/api/ui/page/route.ts" },
   { path: "/api/ui/publish", module: "../../app/api/ui/publish/route.ts" },
 ];
 
