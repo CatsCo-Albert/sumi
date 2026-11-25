@@ -1464,3 +1464,132 @@ button,
   justify-content: flex-start;
   height: 1.875rem;
 }
+
+/* ==========================================================================
+ * What the agent read, and what it changed.
+ *
+ * The mark on the component answers "where did that answer come from" while a
+ * person is looking at the page; the log in the Agent tab answers "what has it
+ * done" after the mark has faded. Outline rather than a background so the mark
+ * does not restyle the control it is pointing at.
+ * ========================================================================== */
+
+[data-agent-mark="read"] {
+  outline: 1.5px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+[data-agent-mark="changed"] {
+  outline: 2px solid var(--tip);
+  outline-offset: 2px;
+}
+
+/* A component can be under the pointer or focused while marked; keep the mark
+   visible rather than letting the focus rule replace it. */
+[data-agent-mark="read"]:focus-visible,
+[data-agent-mark="changed"]:focus-visible {
+  outline-style: solid;
+  outline-offset: 2px;
+}
+
+.tab-count {
+  margin-left: 0.25rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.marks-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.marks-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  margin-left: 0.375rem;
+}
+
+.marks-dot[data-kind="read"] {
+  border: 1.5px dashed var(--accent);
+}
+
+.marks-dot[data-kind="changed"] {
+  background: var(--tip);
+}
+
+.agent-marks {
+  padding: 0.375rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-mark {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.3125rem 0.5rem;
+  border-radius: var(--radius-control);
+  border-bottom: 1px solid var(--line);
+}
+
+.agent-mark:last-child {
+  border-bottom: 0;
+}
+
+.agent-mark:hover {
+  background: var(--hover);
+}
+
+.agent-mark-kind {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  line-height: 1;
+}
+
+.agent-mark[data-kind="read"] .agent-mark-kind {
+  border: 1.5px dashed var(--accent);
+  color: var(--accent);
+}
+
+.agent-mark[data-kind="changed"] .agent-mark-kind {
+  background: var(--tip);
+  color: oklch(1 0 0);
+}
+
+.agent-mark-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+  min-width: 0;
+}
+
+.agent-mark-label {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-mark-meta {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}

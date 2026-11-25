@@ -27,6 +27,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Actor } from "../../src/auth/actor";
 import { listPages } from "../../src/ui-bus/page-registry";
+import { listMarks, markSummary } from "../../src/ui-bus/mark-ledger";
 import type { AggregateResult } from "../../src/ui-bus/agent-bridge";
 
 export interface McpDeps {
@@ -54,6 +55,23 @@ const TOOLS = [
       type: "object",
       properties: {
         projectId: { type: "string", description: "Limit to one Sumi project." },
+      },
+    },
+  },
+  {
+    name: "sumi_marks",
+    description:
+      "What this caller has actually read and changed, recorded by the pages " +
+      "themselves rather than reported by the agent. Answers \"did that read " +
+      "really happen, and where from\" — which a bare tool success cannot. " +
+      "Returns a summary and the newest entries, each with clientId, document, " +
+      "ref, kind and time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        filePath: { type: "string", description: "Only marks for this document." },
+        limit: { type: "number", description: "Newest N entries, up to 500." },
       },
     },
   },
@@ -166,6 +184,20 @@ function buildServer(deps: McpDeps, actor: Actor, request: Request) {
     if (!authorized) return failure("unauthenticated");
 
     try {
+      if (call.params.name === "sumi_marks") {
+        const filePath = typeof args.filePath === "string" ? args.filePath : undefined;
+        const limit = typeof args.limit === "number" ? args.limit : 50;
+        const query = {
+          userId: actor.id,
+          ...(projectId ? { projectId } : {}),
+          ...(filePath ? { filePath } : {}),
+        };
+        return text({
+          summary: markSummary(query),
+          marks: listMarks({ ...query, limit }),
+        });
+      }
+
       if (call.params.name === "sumi_pages") {
         const pages = listPages(actor.id, projectId || undefined).map((page) => ({
           clientId: page.clientId,

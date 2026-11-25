@@ -201,7 +201,8 @@ async function main() {
   check("文件树有该文件", (await page.locator(".tree-file").count()) >= 1);
   check("编辑器挂载", (await page.locator(".cm-content").count()) === 1);
   check("正文加载", (await page.locator(".cm-content").innerText()).includes("Sumi"));
-  check("侧栏四个页签", (await page.locator("[role=tab]").count()) === 4);
+  // Four content tabs plus the agent's activity log.
+  check("侧栏页签", (await page.locator("[role=tab]").count()) >= 4);
   // Two splitters, each a separator; the count is what matters, not the exact
   // number of draggable handles the panel layout happens to expose.
   check("分栏可拖", (await page.locator("[role=separator]").count()) >= 2);

@@ -18,6 +18,7 @@ import { NameDialog } from "./shell";
 import { workspace } from "../lib/workspace";
 import { navigateTo, currentRoute } from "../lib/route";
 import { announcePage, connectUiEvents } from "../lib/ui-events";
+import { agentMarks, clearAgentMarks } from "../lib/agent-marks";
 import { server, readToken, BASE_PATH, type PendingEdit, type VersionSummary } from "../lib/api";
 import { buildFileTree, filterTree, type TreeNode } from "../lib/file-tree";
 import { extractHeadings } from "../lib/outline";
@@ -478,6 +479,12 @@ export function WorkspaceView() {
                   <TabsTab value="members">成员</TabsTab>
                   <TabsTab value="edits">待审</TabsTab>
                   <TabsTab value="history">历史</TabsTab>
+                  <TabsTab value="agent">
+                    Agent
+                    <Show when={agentMarks().length > 0}>
+                      <span class="tab-count">{agentMarks().length}</span>
+                    </Show>
+                  </TabsTab>
                 </TabsList>
 
                 <TabsPanel value="outline">
@@ -577,6 +584,62 @@ export function WorkspaceView() {
                         </For>
                         <Show when={workspace.edits().length === 0}>
                           <div class="empty">没有待审编辑</div>
+                        </Show>
+                      </div>
+                    </ScrollAreaViewport>
+                  </ScrollArea>
+                </TabsPanel>
+
+                <TabsPanel value="agent">
+                  <div class="side-actions">
+                    <Button
+                      data-variant="ghost"
+                      class="ghost"
+                      disabled={agentMarks().length === 0}
+                      onClick={() => clearAgentMarks()}
+                    >
+                      清除标记
+                    </Button>
+                    <span class="spacer" />
+                    <span class="marks-legend">
+                      <span class="marks-dot" data-kind="read" />读过
+                      <span class="marks-dot" data-kind="changed" />动过
+                    </span>
+                  </div>
+                  <ScrollArea>
+                    <ScrollAreaViewport>
+                      <div class="agent-marks">
+                        <For each={agentMarks()}>
+                          {(mark) => (
+                            <div class="agent-mark" data-kind={mark.kind}>
+                              <span class="agent-mark-kind">
+                                {mark.kind === "read" ? "读" : "改"}
+                              </span>
+                              <span class="agent-mark-body">
+                                <span class="agent-mark-label">
+                                  {mark.label || mark.component}
+                                </span>
+                                <span class="agent-mark-meta">
+                                  {mark.component}
+                                  <Show when={mark.via}>
+                                    <span class="dot" aria-hidden="true">·</span>
+                                    {mark.via}
+                                  </Show>
+                                  <span class="dot" aria-hidden="true">·</span>
+                                  {new Intl.DateTimeFormat("zh-CN", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                  }).format(mark.at)}
+                                </span>
+                              </span>
+                            </div>
+                          )}
+                        </For>
+                        <Show when={agentMarks().length === 0}>
+                          <div class="empty">
+                            Agent 还没读过这个页面。它每次读或改，这里都会留一条记录。
+                          </div>
                         </Show>
                       </div>
                     </ScrollAreaViewport>

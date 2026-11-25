@@ -16,6 +16,7 @@
 import { actorFromRequest } from "@/lib/http-auth";
 import { settleAgentCall } from "@/src/ui-bus/agent-bridge";
 import { touchPage } from "@/src/ui-bus/page-registry";
+import { recordMarks } from "@/src/ui-bus/mark-ledger";
 
 export async function POST(request: Request) {
   const actor = await actorFromRequest(request);
@@ -31,6 +32,8 @@ export async function POST(request: Request) {
     ok?: boolean;
     value?: unknown;
     error?: string;
+    /** What the page actually read or changed, written here rather than by the agent. */
+    marks?: unknown;
   };
 
   if (!body.requestId || typeof body.ok !== "boolean") {
@@ -51,6 +54,22 @@ export async function POST(request: Request) {
     touchPage(actor.id, clientId, {
       projectId: body.projectId,
       ...(body.filePath !== undefined ? { filePath: body.filePath } : {}),
+    });
+  }
+
+  /**
+   * The page writes the record, not the agent: a call that returns success while
+   * having done nothing is the failure worth catching, and an agent's own report
+   * cannot tell that apart from a real read.
+   */
+  if (body.projectId && Array.isArray(body.marks) && body.marks.length > 0) {
+    recordMarks({
+      requestId: body.requestId,
+      clientId,
+      userId: actor.id,
+      projectId: body.projectId,
+      filePath: body.filePath ?? null,
+      marks: body.marks,
     });
   }
 

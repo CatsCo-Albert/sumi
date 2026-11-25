@@ -12,6 +12,7 @@
  */
 
 import { createAgent, type AgentStep } from "@ui-sdk/core/agent";
+import { markChanged, markRead } from "./agent-marks";
 
 const agent = createAgent({
   // A step the page marked for a person still runs, because the human is not
@@ -38,16 +39,29 @@ export async function runAgentCall(
 ): Promise<void> {
   try {
     let value: unknown;
+    // Marks travel with the answer: the page is the only place that knows what
+    // it actually read, and a record the agent writes about itself could not
+    // tell "read nothing" apart from "read and reported nothing".
+    let marks: unknown[] = [];
     if (body.call === "snapshot") {
       value = agent.snapshot();
+      marks = markRead(value, "snapshot");
     } else if (body.call === "query") {
       value = await agent.query((body.input ?? {}) as Parameters<typeof agent.query>[0]);
+      marks = markRead(value, "query");
     } else {
       const input = (body.input ?? {}) as { steps?: AgentStep[] };
       const steps = Array.isArray(input.steps) ? input.steps : [];
-      value = await agent.act({ steps });
+      try {
+        value = await agent.act({ steps });
+        marks = markChanged(steps, value);
+      } catch (error) {
+        // A refused or failed step still names what was attempted.
+        marks = markChanged(steps, { steps: [] });
+        throw error;
+      }
     }
-    await post({ requestId: body.requestId, ok: true, value });
+    await post({ requestId: body.requestId, ok: true, value, marks });
   } catch (error) {
     await post({
       requestId: body.requestId,
