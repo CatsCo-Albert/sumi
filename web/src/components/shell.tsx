@@ -5,6 +5,7 @@ import { Input } from "@ui-sdk/solid/input";
 import { workspace } from "../lib/workspace";
 import { apiPath, writeToken } from "../lib/api";
 import { currentRoute, navigateTo } from "../lib/route";
+import { installWebMcp } from "../lib/webmcp";
 import { WorkspaceView } from "./workspace-view";
 
 function SignIn() {
@@ -62,6 +63,11 @@ function SignIn() {
 
 export function Shell() {
   const [ready, setReady] = createSignal(false);
+
+  // Offer this page's tools to the browser's own agent API, once. It is an
+  // additional way in, not a replacement: a browser without the API registers
+  // nothing and the page works exactly as before.
+  installWebMcp();
 
   // A component body runs once, so this is the mount hook.
   void (async () => {

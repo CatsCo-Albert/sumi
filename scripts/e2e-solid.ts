@@ -236,6 +236,73 @@ async function main() {
 
   await page.screenshot({ path: "/tmp/sumi-e2e.png", fullPage: false });
   await browser.close();
+
+  // WebMCP: the page publishes its own tools to the browser, and a client that
+  // speaks WebMCP can read and call them without knowing anything about Sumi.
+  // Chrome only exposes the API behind a flag, so this needs its own browser.
+  console.log("\nWebMCP");
+  const mcpBrowser = await chromium.launch({
+    executablePath: "/usr/bin/google-chrome",
+    args: ["--enable-features=WebMCPTesting"],
+  });
+  const mcpPage = await mcpBrowser.newPage({ viewport: { width: 1440, height: 900 } });
+  const mcpErrors: string[] = [];
+  mcpPage.on("pageerror", (e) => mcpErrors.push(e.message));
+  await mcpPage.addInitScript((value) => {
+    window.sessionStorage.setItem("sumi.token", value);
+  }, token);
+  await mcpPage.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  await mcpPage.locator(".cm-content").waitFor({ timeout: 20_000 });
+  // Registration runs in the shell body, but `getTools` resolves asynchronously.
+  await mcpPage.waitForTimeout(1200);
+
+  const exposed = await mcpPage.evaluate(async () => {
+    const context = (document as unknown as { modelContext?: { getTools(): Promise<unknown> } })
+      .modelContext;
+    if (!context) return { api: false, names: [] as string[] };
+    const tools = (await context.getTools()) as Array<{ name: string }>;
+    return { api: true, names: tools.map((tool) => tool.name) };
+  });
+  check("浏览器暴露 modelContext", exposed.api);
+  check(
+    "三个工具都注册上",
+    exposed.names.length === 3 &&
+      exposed.names.includes("snapshot") &&
+      exposed.names.includes("query") &&
+      exposed.names.includes("act"),
+    exposed.names
+  );
+
+  // Chrome's executeTool takes the arguments as a JSON string and parses them
+  // before calling `execute`, so this also proves the page receives an object.
+  const snapshot = await mcpPage.evaluate(async () => {
+    const context = (document as unknown as {
+      modelContext: {
+        getTools(): Promise<Array<{ name: string }>>;
+        executeTool(tool: unknown, args: string): Promise<unknown>;
+      };
+    }).modelContext;
+    const tool = (await context.getTools()).find((entry) => entry.name === "snapshot");
+    if (!tool) return { ok: false, reason: "no snapshot tool" };
+    const raw = await context.executeTool(tool, "{}");
+    const value = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return { ok: true, components: Array.isArray(value) ? value.length : null };
+  });
+  check("WebMCP 快照返回组件", snapshot.ok && (snapshot.components ?? 0) > 0, snapshot);
+
+  // The call must be visible on the page: a tool that edits without a trace is
+  // exactly what the marks exist to prevent. The outline is what a snapshot
+  // paints, so the check is on the outlines themselves rather than the log —
+  // the log lives in a sidebar panel that only exists once its tab is open.
+  await mcpPage.waitForTimeout(400);
+  const painted = await mcpPage.evaluate(
+    () => document.querySelectorAll("[data-agent-mark]").length
+  );
+  check("快照在控件上留下读标记", painted > 0, { painted });
+  check("WebMCP 页面无报错", mcpErrors.length === 0, mcpErrors.slice(0, 3));
+
+  await mcpPage.screenshot({ path: "/tmp/sumi-webmcp.png", fullPage: false });
+  await mcpBrowser.close();
   await rm(dataDir, { recursive: true, force: true });
 
   console.log(`\n${failures === 0 ? "全部通过" : `${failures} 项失败`}`);

@@ -1,10 +1,15 @@
 /**
- * Executes ui-sdk agent calls coming from the server.
+ * Executes ui-sdk agent calls coming from outside the page.
  *
- * The server cannot read the page — `createAgent` reads live component
- * instances. So when an external agent asks for a snapshot or an action, the
- * request arrives here over SSE, runs against the real components, and the
- * answer is posted back to the API that is waiting for it.
+ * The caller cannot read the page — `createAgent` reads live component
+ * instances. So a request arrives here, runs against the real components, and
+ * the answer travels back: to the server over HTTP for the MCP bridge, or
+ * straight to the caller's promise for WebMCP.
+ *
+ * Both entry points funnel through `executeAgentCall`, and that is the point.
+ * A call that skipped the marks would be an agent editing the page invisibly:
+ * the tools would work and nobody would be able to see what the agent read. The
+ * record belongs to whoever ran the call, which is this page, not the agent.
  *
  * A ref answered here is same-tab only: the ids in `snapshot` belong to this
  * document, so an agent should take a snapshot, act on what it just read, and
@@ -21,6 +26,7 @@ import {
   markChanged,
   markRead,
   updateActivity,
+  type AgentMark,
 } from "./agent-marks";
 
 const agent = createAgent({
@@ -35,6 +41,92 @@ const agent = createAgent({
 
 export type AgentCallName = "snapshot" | "query" | "act";
 
+export interface AgentCallResult {
+  value: unknown;
+  /** What this call read or changed, for the page's own record. */
+  marks: AgentMark[];
+}
+
+function describe(call: AgentCallName): string {
+  return call === "act" ? "准备操作" : call === "query" ? "查找组件" : "读取页面";
+}
+
+/**
+ * Show the outcome for a moment, then clear it.
+ *
+ * A read finishes in milliseconds, so clearing immediately means nobody sees it
+ * at all; a failed call still names what was attempted.
+ */
+function reportOutcome(marks: AgentMark[]): void {
+  if (marks.length === 0) {
+    endActivity();
+    return;
+  }
+  const reads = marks.filter((mark) => mark.kind === "read").length;
+  const changed = marks.length - reads;
+  finishActivity(
+    changed > 0
+      ? `改了 ${changed} 处${reads > 0 ? `，读了 ${reads} 项` : ""}`
+      : `读了 ${reads} 项`
+  );
+}
+
+/**
+ * Run one call against the live page and record what it touched.
+ *
+ * Throws when the call fails; the marks gathered so far are already painted, so
+ * a refused step still leaves a trace of what was attempted.
+ */
+export async function executeAgentCall(
+  call: AgentCallName,
+  input: unknown
+): Promise<AgentCallResult> {
+  // Say what it is doing while it does it: a call that reads forty components
+  // otherwise looks identical to a page where nothing is happening.
+  beginActivity(call, describe(call));
+
+  let marks: AgentMark[] = [];
+  try {
+    if (call === "snapshot") {
+      const value = agent.snapshot();
+      marks = markRead(value, "snapshot");
+      return { value, marks };
+    }
+
+    if (call === "query") {
+      const value = await agent.query(
+        (input ?? {}) as Parameters<typeof agent.query>[0]
+      );
+      marks = markRead(value, "query");
+      return { value, marks };
+    }
+
+    const stepsInput = (input ?? {}) as { steps?: AgentStep[] };
+    const steps = Array.isArray(stepsInput.steps) ? stepsInput.steps : [];
+    // Paint the targets before running them: the step completes in one tick, so
+    // a highlight added afterwards would only ever be seen as the result.
+    markBusy(steps);
+    updateActivity(
+      steps.length > 0
+        ? `操作 ${steps.map((step) => step.action ?? "step").join(", ")}`
+        : "操作页面"
+    );
+    try {
+      const value = await agent.act({ steps });
+      marks = markChanged(steps, value);
+      return { value, marks };
+    } catch (error) {
+      // A refused or failed step still names what was attempted.
+      marks = markChanged(steps, { steps: [] });
+      throw error;
+    } finally {
+      clearBusy(steps);
+    }
+  } finally {
+    reportOutcome(marks);
+  }
+}
+
 interface AgentRequestBody {
   requestId: string;
   call: AgentCallName;
@@ -46,49 +138,10 @@ export async function runAgentCall(
   body: AgentRequestBody,
   post: (payload: Record<string, unknown>) => Promise<unknown>
 ): Promise<void> {
-  // Say what it is doing while it does it: a call that reads forty components
-  // otherwise looks identical to a page where nothing is happening.
-  beginActivity(
-    body.call,
-    body.call === "act" ? "准备操作" : body.call === "query" ? "查找组件" : "读取页面"
-  );
-
-  // Declared outside the try so the finally block can report the outcome.
-  let marks: Array<{ kind: "read" | "changed" }> = [];
-
   try {
-    let value: unknown;
-    // Marks travel with the answer: the page is the only place that knows what
-    // it actually read, and a record the agent writes about itself could not
-    // tell "read nothing" apart from "read and reported nothing".
-    if (body.call === "snapshot") {
-      value = agent.snapshot();
-      marks = markRead(value, "snapshot");
-    } else if (body.call === "query") {
-      value = await agent.query((body.input ?? {}) as Parameters<typeof agent.query>[0]);
-      marks = markRead(value, "query");
-    } else {
-      const input = (body.input ?? {}) as { steps?: AgentStep[] };
-      const steps = Array.isArray(input.steps) ? input.steps : [];
-      // Paint the targets before running them: the step completes in one tick,
-      // so a highlight added afterwards would only ever be seen as the result.
-      markBusy(steps);
-      updateActivity(
-        steps.length > 0
-          ? `操作 ${steps.map((step) => step.action ?? "step").join(", ")}`
-          : "操作页面"
-      );
-      try {
-        value = await agent.act({ steps });
-        marks = markChanged(steps, value);
-      } catch (error) {
-        // A refused or failed step still names what was attempted.
-        marks = markChanged(steps, { steps: [] });
-        throw error;
-      } finally {
-        clearBusy(steps);
-      }
-    }
+    const { value, marks } = await executeAgentCall(body.call, body.input);
+    // Marks travel with the answer: a record the agent writes about itself
+    // could not tell "read nothing" apart from "read and reported nothing".
     await post({ requestId: body.requestId, ok: true, value, marks });
   } catch (error) {
     await post({
@@ -96,19 +149,6 @@ export async function runAgentCall(
       ok: false,
       error: (error as Error)?.message ?? String(error),
     });
-  } finally {
-    // Report the outcome briefly: a completed read is otherwise invisible.
-    if (marks.length > 0) {
-      const reads = marks.filter((mark) => mark.kind === "read").length;
-      const changed = marks.length - reads;
-      finishActivity(
-        changed > 0
-          ? `改了 ${changed} 处${reads > 0 ? `，读了 ${reads} 项` : ""}`
-          : `读了 ${reads} 项`
-      );
-    } else {
-      endActivity();
-    }
   }
 }
 
