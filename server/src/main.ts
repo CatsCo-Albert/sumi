@@ -18,7 +18,7 @@ import { readFile, stat } from "node:fs/promises";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { actorFromRequest } from "../../lib/http-auth";
+import { actorForProject, actorFromRequest } from "../../lib/http-auth";
 import { callAgent } from "../../src/ui-bus/agent-bridge";
 import { handleMcpRequest } from "./mcp";
 
@@ -130,6 +130,9 @@ async function main() {
   api.all("/mcp", (c) =>
     handleMcpRequest(c.req.raw, {
       resolveActor: (request) => actorFromRequest(request),
+      // Membership, not just identity: these tools read and press inside other
+      // members' pages, so being signed in is not enough to ask about a project.
+      authorizeProject: (request, projectId) => actorForProject(request, projectId),
       callAgent,
     })
   );

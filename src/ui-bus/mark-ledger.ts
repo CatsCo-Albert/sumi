@@ -92,7 +92,13 @@ export function recordMarks(input: {
 }
 
 export interface MarkQuery {
-  userId: string;
+  /**
+   * Whose marks. Omitted means "everyone in the project", which is what a
+   * collaborator needs: the question "did anyone read the members panel" is not
+   * answerable from one person's history. Authorization is the project role,
+   * checked before a query is built — not this field.
+   */
+  userId?: string;
   projectId?: string;
   /** Only marks for this document. */
   filePath?: string;
@@ -105,7 +111,7 @@ export function listMarks(query: MarkQuery): MarkEntry[] {
   const out: MarkEntry[] = [];
   for (let i = entries.length - 1; i >= 0 && out.length < limit; i -= 1) {
     const entry = entries[i];
-    if (entry.userId !== query.userId) continue;
+    if (query.userId && entry.userId !== query.userId) continue;
     if (query.projectId && entry.projectId !== query.projectId) continue;
     if (query.filePath && entry.filePath !== query.filePath) continue;
     out.push(entry);
@@ -120,18 +126,23 @@ export function markSummary(query: MarkQuery): {
   changed: number;
   calls: number;
   documents: string[];
+  members: string[];
 } {
   const all = listMarks({ ...query, limit: LIMIT });
   const calls = new Set(all.map((entry) => entry.requestId));
   const documents = new Set(
     all.map((entry) => entry.filePath).filter((p): p is string => Boolean(p))
   );
+  // Which members' pages wrote these marks: the difference between "the agent
+  // read my page" and "the agent read someone else's".
+  const members = new Set(all.map((entry) => entry.userId));
   return {
     total: all.length,
     read: all.filter((entry) => entry.kind === "read").length,
     changed: all.filter((entry) => entry.kind === "changed").length,
     calls: calls.size,
     documents: [...documents],
+    members: [...members],
   };
 }
 

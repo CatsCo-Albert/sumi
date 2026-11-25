@@ -26,14 +26,23 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Actor } from "../../src/auth/actor";
-import { listPages } from "../../src/ui-bus/page-registry";
+import { listProjectPages } from "../../src/ui-bus/page-registry";
 import { listMarks, markSummary } from "../../src/ui-bus/mark-ledger";
 import type { AggregateResult } from "../../src/ui-bus/agent-bridge";
 
 export interface McpDeps {
   /** Resolve the caller from the request's own credential. */
   resolveActor: (request: Request) => Promise<Actor | null>;
-  /** Relay one ui-sdk agent call to the caller's open page(s). */
+  /**
+   * Resolve the caller *and* check they belong to this project.
+   *
+   * Identity alone is not enough here: these tools read and press inside other
+   * people's pages, so the question is never "who are you" but "are you part of
+   * this project's work". Returns null when the caller is not a member, which is
+   * reported as forbidden rather than as a failed call.
+   */
+  authorizeProject: (request: Request, projectId: string) => Promise<Actor | null>;
+  /** Relay one ui-sdk agent call to the project's open page(s). */
   callAgent: (input: {
     projectId: string;
     userId: string;
@@ -47,25 +56,27 @@ const TOOLS = [
   {
     name: "sumi_pages",
     description:
-      "List the workspaces this caller has open: each page's clientId, the " +
-      "document it is showing and when it opened. Call this first when more " +
-      "than one page might be open, then pass a clientId to the other tools to " +
-      "address one page, or omit it to read all of them at once.",
+      "List the workspaces open in a project, whoever is sitting in front of " +
+      "them: each page's clientId, the member it belongs to, the document it is " +
+      "showing and when it opened. Call this first when more than one page might " +
+      "be open, then pass a clientId to the other tools to address one page, or " +
+      "omit it to read all of them at once.",
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "Limit to one Sumi project." },
+        projectId: { type: "string", description: "The Sumi project to look at." },
       },
+      required: ["projectId"],
     },
   },
   {
     name: "sumi_marks",
     description:
-      "What this caller has actually read and changed, recorded by the pages " +
-      "themselves rather than reported by the agent. Answers \"did that read " +
-      "really happen, and where from\" — which a bare tool success cannot. " +
-      "Returns a summary and the newest entries, each with clientId, document, " +
-      "ref, kind and time.",
+      "What has actually been read and changed in a project, recorded by the " +
+      "pages themselves rather than reported by the agent. Answers \"did that " +
+      "read really happen, and on whose page\" — which a bare tool success " +
+      "cannot. Returns a summary, which members' pages wrote it, and the newest " +
+      "entries with clientId, document, ref, kind and time.",
     inputSchema: {
       type: "object",
       properties: {
@@ -179,38 +190,44 @@ function buildServer(deps: McpDeps, actor: Actor, request: Request) {
     const projectId = typeof args.projectId === "string" ? args.projectId : "";
     const clientId = typeof args.clientId === "string" ? args.clientId.trim() : undefined;
 
-    // Authorization is per project, not just per identity.
-    const authorized = await deps.resolveActor(request);
-    if (!authorized) return failure("unauthenticated");
+    // Identity first, then membership. A valid token only says who is asking;
+    // these tools read and press inside other people's pages, so the caller must
+    // also belong to the project they are asking about.
+    const identity = await deps.resolveActor(request);
+    if (!identity) return failure("unauthenticated");
+    if (!projectId) return failure("projectId is required");
+    const authorized = await deps.authorizeProject(request, projectId);
+    if (!authorized) return failure(`forbidden: not a member of ${projectId}`);
 
     try {
       if (call.params.name === "sumi_marks") {
         const filePath = typeof args.filePath === "string" ? args.filePath : undefined;
         const limit = typeof args.limit === "number" ? args.limit : 50;
+        // No userId: a collaborator's question is about the project, not about
+        // their own history. Membership was just checked, so this stays inside
+        // the project either way.
         const query = {
-          userId: actor.id,
-          ...(projectId ? { projectId } : {}),
+          projectId,
           ...(filePath ? { filePath } : {}),
         };
         // An empty list alone is ambiguous: it can mean "never read" or "no page
         // was open to read". Report the pages so the two can be told apart.
         return text({
           summary: markSummary(query),
-          pagesOpen: listPages(actor.id, projectId || undefined).length,
+          pagesOpen: listProjectPages(projectId).length,
           marks: listMarks({ ...query, limit }),
         });
       }
 
       if (call.params.name === "sumi_pages") {
-        const pages = listPages(actor.id, projectId || undefined).map((page) => ({
+        const pages = listProjectPages(projectId).map((page) => ({
           clientId: page.clientId,
+          userId: page.userId,
           filePath: page.filePath,
           openedAt: page.openedAt,
         }));
         return text({ pages });
       }
-
-      if (!projectId) return failure("projectId is required");
 
       if (call.params.name === "sumi_snapshot") {
         return text(
@@ -237,6 +254,12 @@ function buildServer(deps: McpDeps, actor: Actor, request: Request) {
       if (call.params.name === "sumi_act") {
         const steps = Array.isArray(args.steps) ? args.steps : [];
         if (steps.length === 0) return failure("steps must not be empty");
+        // Pressing buttons changes the document, so a read-only member pressing
+        // inside someone else's page is not collaboration — it is a permission
+        // the project never granted. Reads stay open to every member.
+        if (authorized.projectRole === "viewer") {
+          return failure(`forbidden: ${authorized.projectRole} cannot change ${projectId}`);
+        }
         const result = await deps.callAgent({
           projectId,
           userId: actor.id,
