@@ -241,9 +241,12 @@ async function main() {
   // speaks WebMCP can read and call them without knowing anything about Sumi.
   // Chrome only exposes the API behind a flag, so this needs its own browser.
   console.log("\nWebMCP");
+  // Both names are listed because the flag was renamed: `WebMCPTesting` is what
+  // Chrome 150 knows, `WebMCP` is what 153 and later turn on. Passing both keeps
+  // the check about the page rather than about which build happens to be here.
   const mcpBrowser = await chromium.launch({
     executablePath: "/usr/bin/google-chrome",
-    args: ["--enable-features=WebMCPTesting"],
+    args: ["--enable-features=WebMCP,WebMCPTesting"],
   });
   const mcpPage = await mcpBrowser.newPage({ viewport: { width: 1440, height: 900 } });
   const mcpErrors: string[] = [];
@@ -273,20 +276,29 @@ async function main() {
     exposed.names
   );
 
-  // Chrome's executeTool takes the arguments as a JSON string and parses them
-  // before calling `execute`, so this also proves the page receives an object.
+  // Chrome 158 and later take the arguments as an object, which is what the
+  // spec says (`optional object inputObject`). Chrome 150 shipped an earlier
+  // shape that wanted a JSON string. Both are tried so this check is about the
+  // page's tools, not about which build the machine happens to have.
   const snapshot = await mcpPage.evaluate(async () => {
     const context = (document as unknown as {
       modelContext: {
         getTools(): Promise<Array<{ name: string }>>;
-        executeTool(tool: unknown, args: string): Promise<unknown>;
+        executeTool(tool: unknown, args: unknown): Promise<unknown>;
       };
     }).modelContext;
     const tool = (await context.getTools()).find((entry) => entry.name === "snapshot");
     if (!tool) return { ok: false, reason: "no snapshot tool" };
-    const raw = await context.executeTool(tool, "{}");
+    let raw: unknown;
+    let shape = "object";
+    try {
+      raw = await context.executeTool(tool, {});
+    } catch {
+      shape = "string";
+      raw = await context.executeTool(tool, "{}");
+    }
     const value = typeof raw === "string" ? JSON.parse(raw) : raw;
-    return { ok: true, components: Array.isArray(value) ? value.length : null };
+    return { ok: true, shape, components: Array.isArray(value) ? value.length : null };
   });
   check("WebMCP 快照返回组件", snapshot.ok && (snapshot.components ?? 0) > 0, snapshot);
 
