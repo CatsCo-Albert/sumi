@@ -42,6 +42,10 @@ const routeTable: Array<{ path: string; module: string }> = [
   /* Only the page-facing half of the agent bridge remains a route: the
      agent-facing half is the MCP server below. */
   { path: "/api/agent/result", module: "../../app/api/agent/result/route.ts" },
+  /* The loopback hop to the XiaoBa dashboard: the page reports an interaction
+     here, and this process forwards it, because the dashboard is not reachable
+     from the page's origin. */
+  { path: "/api/artifacts/report", module: "../../app/api/artifacts/report/route.ts" },
   { path: "/api/auth/me", module: "../../app/api/auth/me/route.ts" },
   { path: "/api/documents/content", module: "../../app/api/documents/content/route.ts" },
   { path: "/api/edits/apply", module: "../../app/api/edits/apply/route.ts" },
